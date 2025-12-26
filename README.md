@@ -90,4 +90,6 @@ npm run compile
   - Extension manifest: [package.json](package.json)
 
 ## License
-This project is intended for local development and testing. No explicit license is provided.
+This project is licensed under the WTFPL (Do What The Fuck You Want To Public License), Version 2.
+
+See [LICENSE](LICENSE) for the full text.
