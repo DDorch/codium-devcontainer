@@ -2,6 +2,12 @@
 
 Build and run a devcontainer using a Docker image, then open your workspace over SSH in the container.
 
+## Disclaimer
+
+This extension is under development.
+**There may be bugs or missing features.**
+**Use at your own risk.**
+
 ## Features
 - Devcontainer: Build & Run — builds an image and runs a container mounting your workspace.
 - Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
