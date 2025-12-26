@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { parse as parseJSONC } from "jsonc-parser";
 
 type DevcontainerConfig = {
@@ -36,7 +36,49 @@ function getTemplateDockerfilePath(ctx: vscode.ExtensionContext): string {
   return vscode.Uri.joinPath(ctx.extensionUri, "assets", "devcontainer", "Dockerfile").fsPath;
 }
 
-function dockerBuildImage(
+let outputChannel: vscode.OutputChannel | undefined;
+function getOutput(): vscode.OutputChannel {
+  if (!outputChannel) {
+    outputChannel = vscode.window.createOutputChannel("Codium Devcontainer");
+  }
+  return outputChannel;
+}
+
+function logCommand(command: string, args: string[]) {
+  const out = getOutput();
+  const printable = [command, ...args].join(" ");
+  out.appendLine("");
+  out.appendLine(`$ ${printable}`);
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string }
+): Promise<void> {
+  const out = getOutput();
+  logCommand(command, args);
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options?.cwd,
+      env: options?.env,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    if (options?.input) {
+      child.stdin.write(options.input);
+      child.stdin.end();
+    }
+    child.stdout.on("data", (d) => out.append(d.toString()));
+    child.stderr.on("data", (d) => out.append(d.toString()));
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}`));
+    });
+  });
+}
+
+async function dockerBuildImage(
   ctx: vscode.ExtensionContext,
   wsFsPath: string,
   imageName: string,
@@ -45,7 +87,6 @@ function dockerBuildImage(
 ) {
   const templateDockerfile = getTemplateDockerfilePath(ctx);
   const args = [
-    "docker",
     "build",
     "-t",
     imageName,
@@ -59,19 +100,30 @@ function dockerBuildImage(
   }
   args.push(wsFsPath);
   vscode.window.showInformationMessage("Building SSH-enabled devcontainer image...");
-  execSync(args.join(" "), { stdio: "inherit" });
+  getOutput().show(true);
+  await runCommand("docker", args);
 }
 
-function dockerRestartContainer(imageName: string, wsFsPath: string) {
+async function dockerRestartContainer(imageName: string, wsFsPath: string) {
   try {
-    execSync(`docker rm -f ${imageName}-ctr`, { stdio: "ignore" });
-  } catch {}
+    await runCommand("docker", ["rm", "-f", `${imageName}-ctr`]);
+  } catch {
+    // ignore if container did not exist
+  }
 
   vscode.window.showInformationMessage("Starting container with SSH...");
-  execSync(
-    `docker run -d --name ${imageName}-ctr -p 127.0.0.1:2222:22 -v ${wsFsPath}:/workspace ${imageName}`,
-    { stdio: "inherit" }
-  );
+  getOutput().show(true);
+  await runCommand("docker", [
+    "run",
+    "-d",
+    "--name",
+    `${imageName}-ctr`,
+    "-p",
+    "127.0.0.1:2222:22",
+    "-v",
+    `${wsFsPath}:/workspace`,
+    imageName
+  ]);
 }
 
 async function resolvePublicKeyPath(): Promise<string | undefined> {
@@ -99,15 +151,20 @@ async function resolvePublicKeyPath(): Promise<string | undefined> {
   return pubKeyPath;
 }
 
-function ensureAuthorizedKeyInContainer(imageName: string, user: string, pubKeyPath: string) {
-  execSync(
-    `docker exec ${imageName}-ctr bash -lc "mkdir -p /home/${user}/.ssh && chmod 700 /home/${user}/.ssh && touch /home/${user}/.ssh/authorized_keys && chmod 600 /home/${user}/.ssh/authorized_keys && chown -R ${user}:${user} /home/${user}/.ssh"`,
-    { stdio: "inherit" }
-  );
+async function ensureAuthorizedKeyInContainer(imageName: string, user: string, pubKeyPath: string) {
+  await runCommand("docker", [
+    "exec",
+    `${imageName}-ctr`,
+    "bash",
+    "-lc",
+    `mkdir -p /home/${user}/.ssh && chmod 700 /home/${user}/.ssh && touch /home/${user}/.ssh/authorized_keys && chmod 600 /home/${user}/.ssh/authorized_keys && chown -R ${user}:${user} /home/${user}/.ssh`
+  ]);
   const keyData = fs.readFileSync(pubKeyPath, "utf-8").trim() + "\n";
-  execSync(`docker exec -i ${imageName}-ctr bash -lc 'cat >> /home/${user}/.ssh/authorized_keys'`, {
-    input: keyData
-  });
+  await runCommand(
+    "docker",
+    ["exec", "-i", `${imageName}-ctr`, "bash", "-lc", `cat >> /home/${user}/.ssh/authorized_keys`],
+    { input: keyData }
+  );
 }
 
 function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string) {
@@ -162,18 +219,19 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
+        getOutput().show(true);
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
 
-        dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
-        dockerRestartContainer(imageName, ws.uri.fsPath);
+        await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
+        await dockerRestartContainer(imageName, ws.uri.fsPath);
 
         const pubKeyPath = await resolvePublicKeyPath();
         if (pubKeyPath) {
-          ensureAuthorizedKeyInContainer(imageName, "vscode", pubKeyPath);
+          await ensureAuthorizedKeyInContainer(imageName, "vscode", pubKeyPath);
         }
 
         const sshTerminal = vscode.window.createTerminal({
@@ -198,6 +256,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
+        getOutput().show(true);
         const devcontainerDir = path.join(ws.uri.fsPath, ".devcontainer");
         const destDockerfile = path.join(devcontainerDir, "Dockerfile");
 
@@ -228,6 +287,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(
           "Template Dockerfile added to .devcontainer/Dockerfile"
         );
+        getOutput().appendLine("Template Dockerfile created.");
 
         const devcontainerJson = path.join(devcontainerDir, "devcontainer.json");
         if (!fs.existsSync(devcontainerJson)) {
@@ -242,6 +302,7 @@ export function activate(context: vscode.ExtensionContext) {
         } catch {}
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
+        getOutput().appendLine(`Error: ${err.message}`);
       }
     }
   );
@@ -261,12 +322,13 @@ export function activate(context: vscode.ExtensionContext) {
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string = devcontainer.remoteUser || "vscode";
-        dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-        dockerRestartContainer(imageName, ws.uri.fsPath);
+        getOutput().show(true);
+        await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
+        await dockerRestartContainer(imageName, ws.uri.fsPath);
 
         const pubKeyPath = await resolvePublicKeyPath();
         if (pubKeyPath) {
-          ensureAuthorizedKeyInContainer(imageName, remoteUser, pubKeyPath);
+          await ensureAuthorizedKeyInContainer(imageName, remoteUser, pubKeyPath);
         }
 
         // Ensure SSH config has a host alias
@@ -283,6 +345,7 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
+        getOutput().appendLine(`Error: ${err.message}`);
       }
     }
   );
@@ -316,6 +379,7 @@ export function activate(context: vscode.ExtensionContext) {
       "\n";
 
     fs.writeFileSync(dockerfilePath, newContent);
+    getOutput().appendLine("Appended postCreateCommand to Dockerfile.");
   }
 
   context.subscriptions.push(buildAndRun, addDockerfileTemplate, openWorkspaceInDevcontainer);
