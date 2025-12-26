@@ -28,9 +28,26 @@ RUN mkdir -p /var/run/sshd && \
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=1000
-RUN groupadd --gid $USER_GID $USERNAME \
-    && useradd -m --uid $USER_UID --gid $USER_GID -s /bin/bash $USERNAME \
-    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Create group and user safely, avoiding collisions with existing IDs/names
+RUN set -e; \
+    if ! getent group "${USERNAME}" >/dev/null; then \
+      if getent group "${USER_GID}" >/dev/null; then \
+        groupadd "${USERNAME}"; \
+      else \
+        groupadd --gid "${USER_GID}" "${USERNAME}"; \
+      fi; \
+    fi; \
+    if id -u "${USERNAME}" >/dev/null 2>&1; then \
+      usermod -g "${USERNAME}" -s /bin/bash "${USERNAME}"; \
+    else \
+      if getent passwd "${USER_UID}" >/dev/null; then \
+        useradd -m -g "${USERNAME}" -s /bin/bash "${USERNAME}"; \
+      else \
+        useradd -m --uid "${USER_UID}" -g "${USERNAME}" -s /bin/bash "${USERNAME}"; \
+      fi; \
+    fi; \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Make sure there's a .ssh folder with the right permissions. The
 # local id_rsa.pub gets mounted to here through Docker Compose

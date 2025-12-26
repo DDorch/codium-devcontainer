@@ -19,7 +19,7 @@ This extension is under development.
   - Uses `image` as the base image for the template.
   - Optional: `remoteUser` for the SSH user (default: `vscode`).
 - A local SSH public key available (e.g., `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`).
-- Remote - SSH extension installed (the extension can prompt to install it).
+- Optional: Remote - SSH extension (needed only for "Open Workspace in Devcontainer (SSH)" to open the folder in a Remote window). If unavailable on your marketplace (e.g., Open VSX/VSCodium), you can still use "Build & Run" or connect via an SSH terminal.
 
 ## Quickstart
 1. Create a devcontainer config:
@@ -75,7 +75,7 @@ Open your workspace and run "Devcontainer: Open Workspace in Devcontainer (SSH)"
 ```bash
 docker rm -f codium-devcontainer-ctr || true
 ```
-- Remote - SSH missing: the command will prompt to install it.
+- Remote - SSH missing: the command will prompt to install it. If it isn't available in your marketplace, use "Devcontainer: Build & Run" and work via the opened SSH terminal, or manually connect with your preferred SSH client to `vscode@localhost:2222`.
 - No public key found: you will be asked to select a `*.pub` key.
 - Docker permissions: ensure your user can run Docker commands without sudo.
 

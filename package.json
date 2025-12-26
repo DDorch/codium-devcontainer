@@ -23,9 +23,7 @@
     "remote",
     "containers"
   ],
-  "extensionDependencies": [
-    "ms-vscode-remote.remote-ssh"
-  ],
+
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -60,8 +58,12 @@
     "dist/**",
     "assets/**",
     "package.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "dependencies": {
+    "jsonc-parser": "^3.2.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
