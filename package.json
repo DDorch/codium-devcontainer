@@ -4,6 +4,27 @@
   "description": "Build & run a devcontainer using Docker CLI",
   "version": "0.0.1",
   "publisher": "local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DDorch/codium-devcontainer.git"
+  },
+  "homepage": "https://github.com/DDorch/codium-devcontainer#readme",
+  "bugs": {
+    "url": "https://github.com/DDorch/codium-devcontainer/issues"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "devcontainer",
+    "docker",
+    "ssh",
+    "remote",
+    "containers"
+  ],
+  "extensionDependencies": [
+    "ms-vscode-remote.remote-ssh"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
