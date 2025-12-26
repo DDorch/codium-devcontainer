@@ -7,6 +7,8 @@ import { parse as parseJSONC } from "jsonc-parser";
 type DevcontainerConfig = {
   image?: string;
   remoteUser?: string;
+  dockerFile?: string;
+  postCreateCommand?: string | string[];
 };
 
 function getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
@@ -162,6 +164,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
+        await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
 
@@ -232,6 +235,11 @@ export function activate(context: vscode.ExtensionContext) {
             "No devcontainer.json found. The build command expects one in .devcontainer."
           );
         }
+        // Attempt auto-append if devcontainer.json exists
+        try {
+          const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
+          await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
+        } catch {}
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
       }
@@ -249,6 +257,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
+        await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string = devcontainer.remoteUser || "vscode";
@@ -277,6 +286,37 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   );
+  async function appendPostCreateToDockerfile(wsPath: string, devcontainer: DevcontainerConfig) {
+    const devcontainerDir = path.join(wsPath, ".devcontainer");
+    const dockerfileRel = devcontainer.dockerFile || "Dockerfile";
+    const dockerfilePath = path.isAbsolute(dockerfileRel)
+      ? dockerfileRel
+      : path.join(devcontainerDir, dockerfileRel);
+
+    if (!fs.existsSync(dockerfilePath)) {
+      return;
+    }
+
+    const post = devcontainer.postCreateCommand;
+    if (!post || (Array.isArray(post) && post.length === 0)) {
+      return;
+    }
+
+    const dockerfileText = fs.readFileSync(dockerfilePath, "utf-8");
+    const marker = "# Added by codiumDevcontainer: postCreateCommand";
+    if (dockerfileText.includes(marker)) {
+      return;
+    }
+
+    const cmds: string[] = Array.isArray(post) ? post : [post];
+    const lines: string[] = [marker, ...cmds.map((c) => `RUN ${c}`)];
+    const newContent =
+      (dockerfileText.endsWith("\n") ? dockerfileText : dockerfileText + "\n") +
+      lines.join("\n") +
+      "\n";
+
+    fs.writeFileSync(dockerfilePath, newContent);
+  }
 
   context.subscriptions.push(buildAndRun, addDockerfileTemplate, openWorkspaceInDevcontainer);
 }
