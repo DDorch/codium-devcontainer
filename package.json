@@ -1,0 +1,49 @@
+{
+  "name": "codium-devcontainer",
+  "displayName": "Codium Devcontainer",
+  "description": "Build & run a devcontainer using Docker CLI",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "onCommand:codiumDevcontainer.buildAndRun",
+    "onCommand:codiumDevcontainer.addDockerfileTemplate",
+    "onCommand:codiumDevcontainer.openWorkspaceInDevcontainer"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codiumDevcontainer.buildAndRun",
+        "title": "Devcontainer: Build & Run"
+      },
+      {
+        "command": "codiumDevcontainer.addDockerfileTemplate",
+        "title": "Devcontainer: Add Dockerfile Template"
+      },
+      {
+        "command": "codiumDevcontainer.openWorkspaceInDevcontainer",
+        "title": "Devcontainer: Open Workspace in Devcontainer (SSH)"
+      }
+    ]
+  },
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "package": "vsce package"
+  },
+  "files": [
+    "dist/**",
+    "assets/**",
+    "package.json",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.1",
+    "typescript": "^5.3.0"
+  }
+}

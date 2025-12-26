@@ -1,0 +1,59 @@
+# Node dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic reports
+report.*.json
+
+# Testing / coverage
+coverage/
+.nyc_output/
+.vscode-test/
+.vscode-test-web/
+
+# Build outputs
+out/
+dist/
+build/
+tmp/
+temp/
+*.tsbuildinfo
+
+# Caches
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.turbo/
+.rpt2_cache/
+
+# VS Code workspace
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/*.code-snippets
+
+# VS Code extension packages
+*.vsix
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS / Editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
