@@ -40,10 +40,10 @@ npm run compile
 ## How it Works
 - The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
 - The `image` in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) becomes the `BASE_IMAGE` for the template.
-- The container exposes SSH on `127.0.0.1:2222`, mounts your folder to `/workspace`, and starts `sshd`.
+- The container exposes SSH on `127.0.0.1:2222`, mounts your folder to `/workspace/<folderName>`, sets the working directory to that path, and starts `sshd`.
 - Your public key is added to `/home/<remoteUser>/.ssh/authorized_keys` inside the container.
 - An SSH host alias `codium-devcontainer` is appended to `~/.ssh/config`.
-- The extension opens `/workspace` via Remote SSH.
+- The extension opens `/workspace/<folderName>` via Remote SSH.
 
 ## Testing in Positron
 If Positron is installed and on PATH:

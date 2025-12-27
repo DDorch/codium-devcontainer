@@ -113,6 +113,7 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string) {
 
   vscode.window.showInformationMessage("Starting container with SSH...");
   getOutput().show(true);
+  const projectName = path.basename(wsFsPath);
   await runCommand("docker", [
     "run",
     "-d",
@@ -121,7 +122,9 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string) {
     "-p",
     "127.0.0.1:2222:22",
     "-v",
-    `${wsFsPath}:/workspace`,
+    `${wsFsPath}:/workspace/${projectName}`,
+    "-w",
+    `/workspace/${projectName}`,
     imageName
   ]);
 }
@@ -339,8 +342,9 @@ export function activate(context: vscode.ExtensionContext) {
         await ensureSshRemoteExtensionAvailable();
 
         // Open the folder over Remote-SSH
+          const projectName = path.basename(ws.uri.fsPath);
         const remoteUri = vscode.Uri.parse(
-          `vscode-remote://ssh-remote+${hostAlias}/workspace`
+            `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
         );
         await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
       } catch (err: any) {
