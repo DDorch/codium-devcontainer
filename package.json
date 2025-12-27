@@ -44,7 +44,7 @@
       },
       {
         "command": "codiumDevcontainer.openWorkspaceInDevcontainer",
-        "title": "Devcontainer: Open Workspace in Devcontainer (SSH)"
+        "title": "Devcontainer: Open Folder in Devcontainer (SSH)"
       }
     ]
   },

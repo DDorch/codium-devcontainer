@@ -1,6 +1,6 @@
 # Codium Devcontainer (VS Code Extension)
 
-Build and run a devcontainer using a Docker image, then open your workspace over SSH in the container.
+Build and run a devcontainer using a Docker image, then open your folder over SSH in the container.
 
 ## Disclaimer
 
@@ -9,17 +9,17 @@ This extension is under development.
 **Use at your own risk.**
 
 ## Features
-- Devcontainer: Build & Run — builds an image and runs a container mounting your workspace.
+- Devcontainer: Build & Run — builds an image and runs a container mounting your folder.
 - Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
-- Devcontainer: Open Workspace in Devcontainer (SSH) — builds an SSH-enabled image from the template, runs the container, configures keys, and opens the workspace via Remote SSH.
+- Devcontainer: Open Folder in Devcontainer (SSH) — builds an SSH-enabled image from the template, runs the container, configures keys, and opens the folder via Remote SSH.
 
 ## Prerequisites
 - Docker installed and daemon running.
-- A workspace folder with `.devcontainer/devcontainer.json`.
+- A folder with `.devcontainer/devcontainer.json`.
   - Uses `image` as the base image for the template.
   - Optional: `remoteUser` for the SSH user (default: `vscode`).
 - A local SSH public key available (e.g., `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`).
-- Optional: Remote - SSH extension (needed only for "Open Workspace in Devcontainer (SSH)" to open the folder in a Remote window). If unavailable on your marketplace (e.g., Open VSX/VSCodium), you can still use "Build & Run" or connect via an SSH terminal.
+- Optional: Remote - SSH extension (needed only for "Open Folder in Devcontainer (SSH)" to open the folder in a Remote window). If unavailable on your marketplace (e.g., Open VSX/VSCodium), you can still use "Build & Run" or connect via an SSH terminal.
 
 ## Quickstart
 1. Create a devcontainer config:
@@ -34,13 +34,13 @@ This extension is under development.
 npm run compile
 ```
 3. Use the Command Palette:
-   - "Devcontainer: Open Workspace in Devcontainer (SSH)"
+  - "Devcontainer: Open Folder in Devcontainer (SSH)"
    - Or: "Devcontainer: Build & Run" to use `docker exec` rather than SSH.
 
 ## How it Works
 - The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
 - The `image` in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) becomes the `BASE_IMAGE` for the template.
-- The container exposes SSH on `127.0.0.1:2222`, mounts your workspace to `/workspace`, and starts `sshd`.
+- The container exposes SSH on `127.0.0.1:2222`, mounts your folder to `/workspace`, and starts `sshd`.
 - Your public key is added to `/home/<remoteUser>/.ssh/authorized_keys` inside the container.
 - An SSH host alias `codium-devcontainer` is appended to `~/.ssh/config`.
 - The extension opens `/workspace` via Remote SSH.
@@ -63,12 +63,12 @@ npx vsce package
 positron --install-extension ./codium-devcontainer-0.0.1.vsix || \
 code --install-extension ./codium-devcontainer-0.0.1.vsix
 ```
-Open your workspace and run "Devcontainer: Open Workspace in Devcontainer (SSH)" from the Command Palette.
+Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from the Command Palette.
 
 ## Commands
 - Devcontainer: Add Dockerfile Template — creates `.devcontainer/Dockerfile` from [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile).
 - Devcontainer: Build & Run — builds (if needed) and runs the container, then opens a Docker exec terminal.
-- Devcontainer: Open Workspace in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs with SSH on port 2222, configures your key, and opens the folder over SSH.
+- Devcontainer: Open Folder in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs with SSH on port 2222, configures your key, and opens the folder over SSH.
 
 ## Troubleshooting
 - SSH port conflict: stop the previous container or change the port.

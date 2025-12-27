@@ -197,7 +197,7 @@ async function ensureSshRemoteExtensionAvailable() {
   const isPositron = (vscode.env.appName || "").toLowerCase().includes("posit");
   const suggestedId = isPositron ? "jeanp413.open-remote-ssh" : "ms-vscode-remote.remote-ssh";
   const choice = await vscode.window.showInformationMessage(
-    `An SSH remote extension is required to open the workspace over SSH. Install ${suggestedId}?`,
+    `An SSH remote extension is required to open the folder over SSH. Install ${suggestedId}?`,
     "Install",
     "Cancel"
   );
@@ -215,7 +215,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const ws = getWorkspaceFolder();
         if (!ws) {
-          vscode.window.showErrorMessage("No workspace open");
+          vscode.window.showErrorMessage("No folder open");
           return;
         }
 
@@ -252,7 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const ws = vscode.workspace.workspaceFolders?.[0];
         if (!ws) {
-          vscode.window.showErrorMessage("No workspace open");
+          vscode.window.showErrorMessage("No folder open");
           return;
         }
 
@@ -313,7 +313,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const ws = getWorkspaceFolder();
         if (!ws) {
-          vscode.window.showErrorMessage("No workspace open");
+          vscode.window.showErrorMessage("No folder open");
           return;
         }
 
@@ -338,7 +338,7 @@ export function activate(context: vscode.ExtensionContext) {
         // Ensure an SSH remote extension is available (Microsoft or Positron's Open Remote - SSH)
         await ensureSshRemoteExtensionAvailable();
 
-        // Open the workspace over Remote-SSH
+        // Open the folder over Remote-SSH
         const remoteUri = vscode.Uri.parse(
           `vscode-remote://ssh-remote+${hostAlias}/workspace`
         );
