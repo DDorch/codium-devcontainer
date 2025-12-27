@@ -28,9 +28,14 @@
     "vscode": "^1.85.0"
   },
   "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:.devcontainer/devcontainer.json",
     "onCommand:codiumDevcontainer.buildAndRun",
     "onCommand:codiumDevcontainer.addDockerfileTemplate",
-    "onCommand:codiumDevcontainer.openWorkspaceInDevcontainer"
+    "onCommand:codiumDevcontainer.openWorkspaceInDevcontainer",
+    "onCommand:codiumDevcontainer.showMenu",
+    "onCommand:codiumDevcontainer.openDevcontainerConfig",
+    "onCommand:codiumDevcontainer.reopenInDevcontainer"
   ],
   "contributes": {
     "commands": [
@@ -45,8 +50,51 @@
       {
         "command": "codiumDevcontainer.openWorkspaceInDevcontainer",
         "title": "Devcontainer: Open Folder in Devcontainer (SSH)"
+      },
+      {
+        "command": "codiumDevcontainer.showMenu",
+        "title": "Devcontainer: Show Actions"
+      },
+      {
+        "command": "codiumDevcontainer.openDevcontainerConfig",
+        "title": "Devcontainer: Open Devcontainer Configuration"
+      },
+      {
+        "command": "codiumDevcontainer.reopenInDevcontainer",
+        "title": "Devcontainer: Reopen in Devcontainer"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "codiumDevcontainer.showMenu" },
+        { "command": "codiumDevcontainer.openDevcontainerConfig" },
+        { "command": "codiumDevcontainer.reopenInDevcontainer" }
+      ],
+      "explorer/context": [
+        {
+          "command": "codiumDevcontainer.openDevcontainerConfig",
+          "group": "2_workspace",
+          "when": "codiumDevcontainer.hasConfig"
+        },
+        {
+          "command": "codiumDevcontainer.reopenInDevcontainer",
+          "group": "2_workspace",
+          "when": "codiumDevcontainer.hasConfig"
+        }
+      ],
+      "statusBar/remoteIndicator": [
+        {
+          "command": "codiumDevcontainer.openDevcontainerConfig",
+          "group": "remote_20_ssh_3local@8",
+          "when": "!remoteName && codiumDevcontainer.hasConfig"
+        },
+        {
+          "command": "codiumDevcontainer.reopenInDevcontainer",
+          "group": "remote_20_ssh_3local@9",
+          "when": "!remoteName && codiumDevcontainer.hasConfig"
+        }
+      ]
+    }
   },
   "main": "./dist/extension.js",
   "scripts": {

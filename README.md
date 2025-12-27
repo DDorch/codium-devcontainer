@@ -12,6 +12,9 @@ This extension is under development.
 - Devcontainer: Build & Run — builds an image and runs a container mounting your folder.
 - Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
 - Devcontainer: Open Folder in Devcontainer (SSH) — builds an SSH-enabled image from the template, runs the container, configures keys, and opens the folder via Remote SSH.
+- Remote Indicator menu entries — in the bottom-left Remote menu:
+  - Open Devcontainer Configuration
+  - Reopen in Devcontainer
 
 ## Prerequisites
 - Docker installed and daemon running.
@@ -33,9 +36,10 @@ This extension is under development.
 ```bash
 npm run compile
 ```
-3. Use the Command Palette:
+3. Use the Command Palette or status bar:
   - "Devcontainer: Open Folder in Devcontainer (SSH)"
    - Or: "Devcontainer: Build & Run" to use `docker exec` rather than SSH.
+  - Click the status bar “Devcontainer” item for quick actions.
 
 ## How it Works
 - The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
@@ -69,6 +73,9 @@ Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from 
 - Devcontainer: Add Dockerfile Template — creates `.devcontainer/Dockerfile` from [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile).
 - Devcontainer: Build & Run — builds (if needed) and runs the container, then opens a Docker exec terminal.
 - Devcontainer: Open Folder in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs with SSH on port 2222, configures your key, and opens the folder over SSH.
+- Devcontainer: Open Devcontainer Configuration — opens `.devcontainer/devcontainer.json`.
+- Devcontainer: Reopen in Devcontainer — builds and reopens the current folder in the devcontainer.
+  - Note: Explorer context menu entries appear only when `.devcontainer/devcontainer.json` exists in the current folder.
 
 ## Troubleshooting
 - SSH port conflict: stop the previous container or change the port.

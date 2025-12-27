@@ -212,6 +212,24 @@ async function ensureSshRemoteExtensionAvailable() {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  async function updateDevcontainerContext() {
+    const ws = getWorkspaceFolder();
+    const has = ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false;
+    await vscode.commands.executeCommand("setContext", "codiumDevcontainer.hasConfig", has);
+  }
+  // Initialize context and watch for changes to devcontainer.json
+  updateDevcontainerContext();
+  const ws = getWorkspaceFolder();
+  if (ws) {
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(ws.uri.fsPath, ".devcontainer/devcontainer.json")
+    );
+    watcher.onDidCreate(updateDevcontainerContext);
+    watcher.onDidDelete(updateDevcontainerContext);
+    watcher.onDidChange(updateDevcontainerContext);
+    context.subscriptions.push(watcher);
+  }
+
   const buildAndRun = vscode.commands.registerCommand(
     "codiumDevcontainer.buildAndRun",
     async () => {
@@ -342,9 +360,9 @@ export function activate(context: vscode.ExtensionContext) {
         await ensureSshRemoteExtensionAvailable();
 
         // Open the folder over Remote-SSH
-          const projectName = path.basename(ws.uri.fsPath);
+        const projectName = path.basename(ws.uri.fsPath);
         const remoteUri = vscode.Uri.parse(
-            `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
+          `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
         );
         await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
       } catch (err: any) {
@@ -352,6 +370,78 @@ export function activate(context: vscode.ExtensionContext) {
         getOutput().appendLine(`Error: ${err.message}`);
       }
     }
+  );
+
+  const openDevcontainerConfig = vscode.commands.registerCommand(
+    "codiumDevcontainer.openDevcontainerConfig",
+    async () => {
+      const ws = getWorkspaceFolder();
+      if (!ws) {
+        vscode.window.showErrorMessage("No folder open");
+        return;
+      }
+      const cfgPath = getDevcontainerPath(ws.uri.fsPath);
+      if (!fs.existsSync(cfgPath)) {
+        vscode.window.showErrorMessage(".devcontainer/devcontainer.json not found in this folder");
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(cfgPath));
+      await vscode.window.showTextDocument(doc, { preview: false });
+    }
+  );
+
+  const reopenInDevcontainer = vscode.commands.registerCommand(
+    "codiumDevcontainer.reopenInDevcontainer",
+    async () => {
+      await vscode.commands.executeCommand("codiumDevcontainer.openWorkspaceInDevcontainer");
+    }
+  );
+
+  const showMenu = vscode.commands.registerCommand(
+    "codiumDevcontainer.showMenu",
+    async () => {
+      const ws = getWorkspaceFolder();
+      const has = ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false;
+      const picks: vscode.QuickPickItem[] = [
+        has
+          ? { label: "$(gear) Open Devcontainer Configuration", detail: ".devcontainer/devcontainer.json" }
+          : { label: "$(gear) Open Devcontainer Configuration", description: "(no devcontainer.json)" },
+        has
+          ? { label: "$(refresh) Reopen in Devcontainer", detail: "Build and open folder over SSH" }
+          : { label: "$(circle-slash) Reopen in Devcontainer", description: "(requires .devcontainer/devcontainer.json)" }
+      ];
+      const chosen = await vscode.window.showQuickPick(picks, {
+        title: "Codium Devcontainer",
+        placeHolder: "Select an action"
+      });
+      if (!chosen) return;
+      if (chosen.label.includes("Open Devcontainer Configuration")) {
+        if (!has) {
+          vscode.window.showInformationMessage(
+            "No devcontainer.json found in this folder. Use 'Devcontainer: Add Dockerfile Template' to scaffold and create .devcontainer/devcontainer.json."
+          );
+          return;
+        }
+        await vscode.commands.executeCommand("codiumDevcontainer.openDevcontainerConfig");
+      } else if (chosen.label.includes("Reopen in Devcontainer")) {
+        if (!has) {
+          vscode.window.showInformationMessage(
+            "Cannot reopen in devcontainer: .devcontainer/devcontainer.json is missing."
+          );
+          return;
+        }
+        await vscode.commands.executeCommand("codiumDevcontainer.reopenInDevcontainer");
+      }
+    }
+  );
+
+  context.subscriptions.push(
+    buildAndRun,
+    addDockerfileTemplate,
+    openWorkspaceInDevcontainer,
+    openDevcontainerConfig,
+    reopenInDevcontainer,
+    showMenu
   );
   async function appendPostCreateToDockerfile(wsPath: string, devcontainer: DevcontainerConfig) {
     const devcontainerDir = path.join(wsPath, ".devcontainer");
@@ -386,7 +476,7 @@ export function activate(context: vscode.ExtensionContext) {
     getOutput().appendLine("Appended postCreateCommand to Dockerfile.");
   }
 
-  context.subscriptions.push(buildAndRun, addDockerfileTemplate, openWorkspaceInDevcontainer);
+  // Already added above
 }
 
 export function deactivate() {}
