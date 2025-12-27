@@ -102,6 +102,6 @@ npm run compile
   - CI workflow: [.github/workflows/release.yml](.github/workflows/release.yml)
 
 ## License
-This project is licensed under the WTFPL (Do What The Fuck You Want To Public License), Version 2.
+This project is licensed under the MIT License.
 
 See [LICENSE](LICENSE) for the full text.
