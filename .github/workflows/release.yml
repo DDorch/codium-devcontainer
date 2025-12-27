@@ -1,0 +1,51 @@
+name: Release VSIX
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate tag matches package.json version
+        run: |
+          node -e "const v=require('./package.json').version; const tag=process.env.GITHUB_REF_NAME.replace(/^v/, ''); if(v!==tag){console.error(`Version mismatch: package.json ${v} != tag ${tag}`); process.exit(1);} console.log('Version OK:', v);"
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Find VSIX filename
+        id: vsix
+        run: |
+          FILE=$(ls *.vsix | head -n1)
+          echo "vsix_file=$FILE" >> $GITHUB_OUTPUT
+          echo "Found VSIX: $FILE"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.vsix.outputs.vsix_file }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

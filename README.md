@@ -91,10 +91,15 @@ docker rm -f codium-devcontainer-ctr || true
 ```bash
 npm run compile
 ```
+- Release (CI):
+  - Push a tag `vX.Y.Z` matching `package.json` version.
+  - GitHub Actions builds the VSIX and creates a release attaching the `.vsix`.
+  - Manual trigger available via the workflow dispatch if needed.
 - Project files:
   - Extension entry: [src/extension.ts](src/extension.ts)
   - Template Dockerfile: [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile)
   - Extension manifest: [package.json](package.json)
+  - CI workflow: [.github/workflows/release.yml](.github/workflows/release.yml)
 
 ## License
 This project is licensed under the WTFPL (Do What The Fuck You Want To Public License), Version 2.
