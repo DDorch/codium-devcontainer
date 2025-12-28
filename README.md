@@ -16,6 +16,18 @@ This extension is under development.
   - Open Devcontainer Configuration
   - Reopen in Devcontainer
 
+## Installation
+- From GitHub Releases (recommended):
+  - Download the latest `.vsix` from the Releases page: https://github.com/DDorch/codium-devcontainer/releases/latest
+  - Install the VSIX:
+    - VS Code: `code --install-extension ./codium-devcontainer-X.Y.Z.vsix`
+    - Positron: `positron --install-extension ./codium-devcontainer-X.Y.Z.vsix`
+    - UI: Extensions view → “…” menu → Install from VSIX…
+- From source (optional):
+  - `npm ci && npm run compile`
+  - `npm i -D @vscode/vsce && npx vsce package`
+  - Install the generated `.vsix` as above
+
 ## Prerequisites
 - Docker installed and daemon running.
 - A folder with `.devcontainer/devcontainer.json`.
@@ -58,15 +70,6 @@ positron --extensionDevelopmentPath="$PWD"
 If not available, test in VS Code similarly:
 ```bash
 code --extensionDevelopmentPath="$PWD"
-```
-
-### Test via VSIX
-```bash
-npm i -D @vscode/vsce
-npx vsce package
-# Install into Positron or VS Code
-positron --install-extension ./codium-devcontainer-0.0.1.vsix || \
-code --install-extension ./codium-devcontainer-0.0.1.vsix
 ```
 Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from the Command Palette.
 
