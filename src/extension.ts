@@ -463,13 +463,17 @@ export function activate(context: vscode.ExtensionContext) {
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
-        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
+        await stageEntrypointTemporarily(context, ws.uri.fsPath);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const port = await findFreePort();
         const containerName = getContainerName(imageName, ws.uri.fsPath);
 
-        await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
+        try {
+          await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
+        } finally {
+          await cleanupEntrypointIfManaged(ws.uri.fsPath);
+        }
         await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
         const detectedUser = await getEffectiveUser(containerName);
@@ -526,8 +530,7 @@ export function activate(context: vscode.ExtensionContext) {
         const template = fs.readFileSync(templateUri.fsPath);
         fs.writeFileSync(destDockerfile, template);
 
-        // Also scaffold entrypoint script into workspace for COPY
-        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
+        // Entrypoint script will be staged automatically during builds to avoid workspace pollution.
 
         vscode.window.showInformationMessage(
           "Template Dockerfile added to .devcontainer/Dockerfile"
@@ -564,14 +567,18 @@ export function activate(context: vscode.ExtensionContext) {
 
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
-        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
+        await stageEntrypointTemporarily(context, ws.uri.fsPath);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
         const port = await findFreePort();
         const containerName = getContainerName(imageName, ws.uri.fsPath);
         getOutput().show(true);
-        await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
+        try {
+          await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
+        } finally {
+          await cleanupEntrypointIfManaged(ws.uri.fsPath);
+        }
         await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
         const effectiveUser = await getEffectiveUser(containerName, remoteUser);
@@ -732,6 +739,41 @@ export function activate(context: vscode.ExtensionContext) {
       }
     } catch (e: any) {
       getOutput().appendLine(`Failed to ensure entrypoint.sh: ${e?.message ?? e}`);
+    }
+  }
+
+  async function stageEntrypointTemporarily(ctx: vscode.ExtensionContext, wsPath: string) {
+    try {
+      const devcontainerDir = path.join(wsPath, ".devcontainer");
+      const destEntrypoint = path.join(devcontainerDir, "entrypoint.sh");
+      fs.mkdirSync(devcontainerDir, { recursive: true });
+      const marker = "# Added by codiumDevcontainer: entrypoint";
+      const hasMarker = fs.existsSync(destEntrypoint) &&
+        fs.readFileSync(destEntrypoint, "utf-8").includes(marker);
+      if (!hasMarker) {
+        const templateEntrypoint = getTemplateEntrypointPath(ctx);
+        const content = fs.readFileSync(templateEntrypoint);
+        fs.writeFileSync(destEntrypoint, content, { mode: 0o755 });
+        getOutput().appendLine("Staged entrypoint.sh in .devcontainer for build.");
+      }
+    } catch (e: any) {
+      getOutput().appendLine(`Failed to stage entrypoint.sh: ${e?.message ?? e}`);
+    }
+  }
+
+  async function cleanupEntrypointIfManaged(wsPath: string) {
+    try {
+      const devcontainerDir = path.join(wsPath, ".devcontainer");
+      const destEntrypoint = path.join(devcontainerDir, "entrypoint.sh");
+      if (!fs.existsSync(destEntrypoint)) return;
+      const text = fs.readFileSync(destEntrypoint, "utf-8");
+      const marker = "# Added by codiumDevcontainer: entrypoint";
+      if (text.includes(marker)) {
+        fs.rmSync(destEntrypoint, { force: true });
+        getOutput().appendLine("Cleaned up staged entrypoint.sh from workspace.");
+      }
+    } catch (e: any) {
+      getOutput().appendLine(`Failed to cleanup entrypoint.sh: ${e?.message ?? e}`);
     }
   }
 
