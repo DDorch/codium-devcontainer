@@ -90,11 +90,9 @@ Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from 
   - Note: Explorer context menu entries appear only when `.devcontainer/devcontainer.json` exists in the current folder.
 
 ## Troubleshooting
-- SSH port conflict: stop the previous container or change the port.
-```bash
-docker rm -f codium-devcontainer-ctr || true
-```
-- Remote - SSH missing: the command will prompt to install it. If it isn't available in your marketplace, use "Devcontainer: Build & Run" and work via the opened SSH terminal, or manually connect with your preferred SSH client to `<user>@localhost:2222` (the user is either `remoteUser` or detected via `whoami`).
+- SSH connection issues:
+  - Firewalls or corporate endpoint protection can block localhost SSH connections; temporarily disable or add an allow rule if needed.
+- Remote - SSH missing: the command will prompt to install it. If it isn't available in your marketplace, use "Devcontainer: Build & Run" and work via the opened SSH terminal, or manually connect with your preferred SSH client to `<user>@localhost:<port>` (the user is either `remoteUser` or detected via `whoami`).
 - No public key found: you will be asked to select a `*.pub` key.
 - Docker permissions: ensure your user can run Docker commands without sudo.
 
