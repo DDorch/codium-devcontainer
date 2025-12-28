@@ -38,6 +38,10 @@ function getTemplateDockerfilePath(ctx: vscode.ExtensionContext): string {
   return vscode.Uri.joinPath(ctx.extensionUri, "assets", "devcontainer", "Dockerfile").fsPath;
 }
 
+function getTemplateEntrypointPath(ctx: vscode.ExtensionContext): string {
+  return vscode.Uri.joinPath(ctx.extensionUri, "assets", "devcontainer", "entrypoint.sh").fsPath;
+}
+
 let outputChannel: vscode.OutputChannel | undefined;
 function getOutput(): vscode.OutputChannel {
   if (!outputChannel) {
@@ -181,6 +185,8 @@ async function dockerRestartContainer(
     "-d",
     "--name",
     containerName,
+    "-e",
+    `CODIUM_WS=/workspace/${projectName}`,
     "-p",
     `127.0.0.1:${hostPort}:22`,
     "-v",
@@ -336,13 +342,30 @@ async function setupSshAccess(containerName: string, user: string, port: number)
   return ok;
 }
 
-function openSshTerminal(title: string, user: string, port: number) {
+function openSshTerminal(
+  title: string,
+  user: string,
+  port: number,
+  onClose?: () => void
+): vscode.Terminal {
   const sshTerminal = vscode.window.createTerminal({
     name: title,
     shellPath: "ssh",
     shellArgs: ["-F", "/dev/null", "-p", String(port), `${user}@localhost`]
   });
   sshTerminal.show();
+  if (onClose) {
+    const sub = vscode.window.onDidCloseTerminal((t) => {
+      if (t === sshTerminal) {
+        try {
+          onClose();
+        } finally {
+          sub.dispose();
+        }
+      }
+    });
+  }
+  return sshTerminal;
 }
 
 function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string) {
@@ -440,6 +463,7 @@ export function activate(context: vscode.ExtensionContext) {
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
+        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const port = await findFreePort();
@@ -450,7 +474,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         const detectedUser = await getEffectiveUser(containerName);
         await setupSshAccess(containerName, detectedUser, port);
-        openSshTerminal("Devcontainer SSH", detectedUser, port);
+        openSshTerminal("Devcontainer SSH", detectedUser, port, async () => {
+          try {
+            await runCommand("docker", ["rm", "-f", containerName]);
+            getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
+          } catch (e: any) {
+            getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
+          }
+        });
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
       }
@@ -495,6 +526,9 @@ export function activate(context: vscode.ExtensionContext) {
         const template = fs.readFileSync(templateUri.fsPath);
         fs.writeFileSync(destDockerfile, template);
 
+        // Also scaffold entrypoint script into workspace for COPY
+        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
+
         vscode.window.showInformationMessage(
           "Template Dockerfile added to .devcontainer/Dockerfile"
         );
@@ -530,6 +564,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
+        await ensureWorkspaceEntrypoint(context, ws.uri.fsPath);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
@@ -552,7 +587,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Verify SSH auth before opening Remote-SSH
         if (!ok) {
-          openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port);
+          openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port, async () => {
+            try {
+              await runCommand("docker", ["rm", "-f", containerName]);
+              getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
+            } catch (e: any) {
+              getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
+            }
+          });
           return;
         }
 
@@ -674,6 +716,25 @@ export function activate(context: vscode.ExtensionContext) {
     getOutput().appendLine("Appended postCreateCommand to Dockerfile.");
   }
 
+  async function ensureWorkspaceEntrypoint(ctx: vscode.ExtensionContext, wsPath: string) {
+    try {
+      const devcontainerDir = path.join(wsPath, ".devcontainer");
+      const destEntrypoint = path.join(devcontainerDir, "entrypoint.sh");
+      fs.mkdirSync(devcontainerDir, { recursive: true });
+      const marker = "# Added by codiumDevcontainer: entrypoint";
+      const needsWrite = !fs.existsSync(destEntrypoint) ||
+        !fs.readFileSync(destEntrypoint, "utf-8").includes(marker);
+      if (needsWrite) {
+        const templateEntrypoint = getTemplateEntrypointPath(ctx);
+        const content = fs.readFileSync(templateEntrypoint);
+        fs.writeFileSync(destEntrypoint, content, { mode: 0o755 });
+        getOutput().appendLine("Workspace entrypoint.sh created in .devcontainer.");
+      }
+    } catch (e: any) {
+      getOutput().appendLine(`Failed to ensure entrypoint.sh: ${e?.message ?? e}`);
+    }
+  }
+
   // Already added above
 }
 
@@ -742,4 +803,14 @@ async function readDevcontainerConfigFromWorkspace(wsUri: vscode.Uri): Promise<D
   }
 }
 
-export function deactivate() {}
+export async function deactivate() {
+  try {
+    if (!vscode.env.remoteName) return;
+    const ws = getWorkspaceFolder();
+    if (!ws) return;
+    const stopPath = path.join(ws.uri.fsPath, ".codium-devcontainer-stop");
+    fs.writeFileSync(stopPath, "stop\n");
+  } catch {
+    // ignore
+  }
+}

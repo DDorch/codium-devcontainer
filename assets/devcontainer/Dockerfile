@@ -57,5 +57,9 @@ EXPOSE 22
 # Workdir where the workspace will be mounted
 WORKDIR /workspace
 
-# Start OpenSSH server in foreground for SSH access
-CMD ["/usr/sbin/sshd", "-D"]
+# Copy entrypoint from workspace to image and configure as default command
+COPY .devcontainer/entrypoint.sh /usr/local/bin/codium-devcontainer-entrypoint
+RUN chmod +x /usr/local/bin/codium-devcontainer-entrypoint
+
+# Start entrypoint which manages sshd and shutdown
+CMD ["/usr/local/bin/codium-devcontainer-entrypoint"]
