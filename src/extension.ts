@@ -356,6 +356,16 @@ async function ensureSshRemoteExtensionAvailable() {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  // Reset postStart once-per-folder guard at the start of each remote window
+  async function resetPostStartGuard() {
+    try {
+      if (!vscode.env.remoteName) return;
+      const ws = getWorkspaceFolder();
+      if (!ws) return;
+      const key = `codiumDevcontainer.postStart.run:${ws.uri.fsPath}`;
+      await context.workspaceState.update(key, undefined);
+    } catch {}
+  }
   async function updateDevcontainerContext() {
     const ws = getWorkspaceFolder();
     const has = ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false;
@@ -363,6 +373,8 @@ export function activate(context: vscode.ExtensionContext) {
   }
   // Initialize context and watch for changes to devcontainer.json
   updateDevcontainerContext();
+  // Ensure postStart can run once per remote session
+  resetPostStartGuard();
   const ws = getWorkspaceFolder();
   if (ws) {
     const watcher = vscode.workspace.createFileSystemWatcher(
