@@ -19,11 +19,17 @@ This project is inspired by Andrew Heiss’s blog post, which demonstrates using
   - Reopen in Devcontainer
 
 ## Installation
-- From GitHub Releases (recommended):
-  - Download the latest `.vsix` from the Releases page: https://github.com/DDorch/codium-devcontainer/releases/latest
+- From Open VSX Marketplace (recommended for VSCodium/Positron/Theia):
+  - UI: Extensions view → search for "Codium Devcontainer" → Install
+  - CLI:
+    - VSCodium: `codium --install-extension DDorch.codium-devcontainer`
+    - Positron: `positron --install-extension DDorch.codium-devcontainer`
+  - Open VSX page: https://open-vsx.org/extension/DDorch/codium-devcontainer
+- From GitHub Releases (for VS Code or offline):
+  - Download the latest `.vsix` from https://github.com/DDorch/codium-devcontainer/releases/latest
   - Install the VSIX:
     - VS Code: `code --install-extension ./codium-devcontainer-X.Y.Z.vsix`
-    - Positron: `positron --install-extension ./codium-devcontainer-X.Y.Z.vsix`
+    - VSCodium/Positron: `codium|positron --install-extension ./codium-devcontainer-X.Y.Z.vsix`
     - UI: Extensions view → “…” menu → Install from VSIX…
 - From source (optional):
   - `npm ci && npm run compile`
