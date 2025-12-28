@@ -278,6 +278,41 @@ async function verifySshLogin(user: string): Promise<boolean> {
   return false;
 }
 
+async function getEffectiveUser(imageName: string, remoteUser?: string): Promise<string> {
+  if (remoteUser) {
+    return remoteUser;
+  }
+  let user = await getContainerUsername(imageName);
+  if (user === "root") {
+    const alt = await detectPreferredNonRootUser(imageName);
+    if (alt) {
+      user = alt;
+      vscode.window.showInformationMessage(
+        `Detected default user 'root'; using '${alt}' for SSH. Provide 'remoteUser' to force a specific user.`
+      );
+    }
+  }
+  return user;
+}
+
+async function setupSshAccess(imageName: string, user: string): Promise<boolean> {
+  const pubKeyPath = await resolvePublicKeyPath();
+  if (pubKeyPath) {
+    await ensureAuthorizedKeyInContainer(imageName, user, pubKeyPath);
+  }
+  const ok = await verifySshLogin(user);
+  return ok;
+}
+
+function openSshTerminal(title: string, user: string) {
+  const sshTerminal = vscode.window.createTerminal({
+    name: title,
+    shellPath: "ssh",
+    shellArgs: ["-F", "/dev/null", "-p", "2222", `${user}@localhost`]
+  });
+  sshTerminal.show();
+}
+
 function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string) {
   const homeDir = getHomeDir();
   const sshDir = path.join(homeDir, ".ssh");
@@ -358,29 +393,9 @@ export function activate(context: vscode.ExtensionContext) {
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
         await dockerRestartContainer(imageName, ws.uri.fsPath);
 
-        let detectedUser = await getContainerUsername(imageName);
-        if (detectedUser === "root") {
-          const alt = await detectPreferredNonRootUser(imageName);
-          if (alt) {
-            detectedUser = alt;
-            vscode.window.showInformationMessage(
-              `Detected default user 'root'; switching to '${alt}' for SSH. Set 'remoteUser' in devcontainer.json to override.`
-            );
-          }
-        }
-        const pubKeyPath = await resolvePublicKeyPath();
-        if (pubKeyPath) {
-          await ensureAuthorizedKeyInContainer(imageName, detectedUser, pubKeyPath);
-        }
-
-        await verifySshLogin(detectedUser);
-
-        const sshTerminal = vscode.window.createTerminal({
-          name: "Devcontainer SSH",
-          shellPath: "ssh",
-          shellArgs: ["-F", "/dev/null", "-p", "2222", `${detectedUser}@localhost`]
-        });
-        sshTerminal.show();
+        const detectedUser = await getEffectiveUser(imageName);
+        await setupSshAccess(imageName, detectedUser);
+        openSshTerminal("Devcontainer SSH", detectedUser);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
       }
@@ -467,20 +482,8 @@ export function activate(context: vscode.ExtensionContext) {
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
         await dockerRestartContainer(imageName, ws.uri.fsPath);
 
-        let effectiveUser = remoteUser || (await getContainerUsername(imageName));
-        if (!remoteUser && effectiveUser === "root") {
-          const alt = await detectPreferredNonRootUser(imageName);
-          if (alt) {
-            effectiveUser = alt;
-            vscode.window.showInformationMessage(
-              `Detected default user 'root'; using '${alt}' for SSH. Provide 'remoteUser' to force a specific user.`
-            );
-          }
-        }
-        const pubKeyPath = await resolvePublicKeyPath();
-        if (pubKeyPath) {
-          await ensureAuthorizedKeyInContainer(imageName, effectiveUser, pubKeyPath);
-        }
+        const effectiveUser = await getEffectiveUser(imageName, remoteUser);
+        const ok = await setupSshAccess(imageName, effectiveUser);
 
         // Ensure SSH config has a host alias
         const hostAlias = "codium-devcontainer";
@@ -490,14 +493,8 @@ export function activate(context: vscode.ExtensionContext) {
         await ensureSshRemoteExtensionAvailable();
 
         // Verify SSH auth before opening Remote-SSH
-        const ok = await verifySshLogin(effectiveUser);
         if (!ok) {
-          const term = vscode.window.createTerminal({
-            name: "Devcontainer SSH (manual)",
-            shellPath: "ssh",
-            shellArgs: ["-F", "/dev/null", "-p", "2222", `${effectiveUser}@localhost`]
-          });
-          term.show();
+          openSshTerminal("Devcontainer SSH (manual)", effectiveUser);
           return;
         }
 
