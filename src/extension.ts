@@ -78,6 +78,36 @@ function runCommand(
   });
 }
 
+async function runCommandCapture(
+  command: string,
+  args: string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv }
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  const out = getOutput();
+  logCommand(command, args);
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: options?.cwd,
+      env: options?.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      const s = d.toString();
+      stdout += s;
+      out.append(s);
+    });
+    child.stderr.on("data", (d) => {
+      const s = d.toString();
+      stderr += s;
+      out.append(s);
+    });
+    child.on("error", () => resolve({ stdout: "", stderr: "error", code: 1 }));
+    child.on("close", (code) => resolve({ stdout, stderr, code: code ?? 1 }));
+  });
+}
+
 async function dockerBuildImage(
   ctx: vscode.ExtensionContext,
   wsFsPath: string,
@@ -129,6 +159,55 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string) {
   ]);
 }
 
+async function getContainerUsername(imageName: string): Promise<string> {
+  const result = await runCommandCapture("docker", ["exec", `${imageName}-ctr`, "whoami"]);
+  if (result.code === 0 && result.stdout.trim()) {
+    return result.stdout.trim();
+  }
+  vscode.window.showWarningMessage(
+    "Could not detect container user with 'whoami'. Falling back to 'root'."
+  );
+  return "root";
+}
+
+async function detectPreferredNonRootUser(imageName: string): Promise<string | undefined> {
+  // Try to find a typical login user (uid >= 1000) from /etc/passwd
+  const res1 = await runCommandCapture("docker", [
+    "exec",
+    `${imageName}-ctr`,
+    "bash",
+    "-lc",
+    "awk -F: '$3>=1000 && $1!=\"nobody\" {print $1}' /etc/passwd | head -n1"
+  ]);
+  const candidate1 = res1.stdout.trim();
+  if (candidate1) return candidate1;
+
+  // Fallback: pick the first directory name under /home
+  const res2 = await runCommandCapture("docker", [
+    "exec",
+    `${imageName}-ctr`,
+    "bash",
+    "-lc",
+    "ls -1 /home 2>/dev/null | head -n1"
+  ]);
+  const candidate2 = res2.stdout.trim();
+  if (candidate2) return candidate2;
+  return undefined;
+}
+
+async function getUserHome(imageName: string, user: string): Promise<string> {
+  const res = await runCommandCapture("docker", [
+    "exec",
+    `${imageName}-ctr`,
+    "bash",
+    "-lc",
+    `eval echo ~${user}`
+  ]);
+  const home = res.stdout.trim();
+  if (home) return home;
+  return user === "root" ? "/root" : `/home/${user}`;
+}
+
 async function resolvePublicKeyPath(): Promise<string | undefined> {
   const homeDir = getHomeDir();
   const candidates = [
@@ -155,19 +234,48 @@ async function resolvePublicKeyPath(): Promise<string | undefined> {
 }
 
 async function ensureAuthorizedKeyInContainer(imageName: string, user: string, pubKeyPath: string) {
+  const home = await getUserHome(imageName, user);
   await runCommand("docker", [
     "exec",
     `${imageName}-ctr`,
     "bash",
     "-lc",
-    `mkdir -p /home/${user}/.ssh && chmod 700 /home/${user}/.ssh && touch /home/${user}/.ssh/authorized_keys && chmod 600 /home/${user}/.ssh/authorized_keys && chown -R ${user}:${user} /home/${user}/.ssh`
+    `mkdir -p ${home}/.ssh && chmod 700 ${home}/.ssh && touch ${home}/.ssh/authorized_keys && chmod 600 ${home}/.ssh/authorized_keys && chown -R ${user}:${user} ${home}/.ssh`
   ]);
   const keyData = fs.readFileSync(pubKeyPath, "utf-8").trim() + "\n";
   await runCommand(
     "docker",
-    ["exec", "-i", `${imageName}-ctr`, "bash", "-lc", `cat >> /home/${user}/.ssh/authorized_keys`],
+    ["exec", "-i", `${imageName}-ctr`, "bash", "-lc", `cat >> ${home}/.ssh/authorized_keys`],
     { input: keyData }
   );
+}
+
+async function verifySshLogin(user: string): Promise<boolean> {
+  const res = await runCommandCapture("ssh", [
+    "-F",
+    "/dev/null",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-p",
+    "2222",
+    `${user}@localhost`,
+    "true"
+  ]);
+  if (res.code === 0) return true;
+  if (res.stderr.includes("Bad configuration option")) {
+    vscode.window.showWarningMessage(
+      "SSH config parsing failed due to an invalid option in ~/.ssh/config. Comment out or remove non-standard options, then retry."
+    );
+  } else {
+    vscode.window.showWarningMessage(
+      `SSH login failed for user '${user}'. If the container uses 'root' and root login is disabled, set 'remoteUser' in devcontainer.json to a non-root user or adjust sshd_config.`
+    );
+  }
+  return false;
 }
 
 function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string) {
@@ -250,15 +358,27 @@ export function activate(context: vscode.ExtensionContext) {
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
         await dockerRestartContainer(imageName, ws.uri.fsPath);
 
+        let detectedUser = await getContainerUsername(imageName);
+        if (detectedUser === "root") {
+          const alt = await detectPreferredNonRootUser(imageName);
+          if (alt) {
+            detectedUser = alt;
+            vscode.window.showInformationMessage(
+              `Detected default user 'root'; switching to '${alt}' for SSH. Set 'remoteUser' in devcontainer.json to override.`
+            );
+          }
+        }
         const pubKeyPath = await resolvePublicKeyPath();
         if (pubKeyPath) {
-          await ensureAuthorizedKeyInContainer(imageName, "vscode", pubKeyPath);
+          await ensureAuthorizedKeyInContainer(imageName, detectedUser, pubKeyPath);
         }
+
+        await verifySshLogin(detectedUser);
 
         const sshTerminal = vscode.window.createTerminal({
           name: "Devcontainer SSH",
           shellPath: "ssh",
-          shellArgs: ["-p", "2222", "vscode@localhost"]
+          shellArgs: ["-F", "/dev/null", "-p", "2222", `${detectedUser}@localhost`]
         });
         sshTerminal.show();
       } catch (err: any) {
@@ -342,22 +462,44 @@ export function activate(context: vscode.ExtensionContext) {
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
-        const remoteUser: string = devcontainer.remoteUser || "vscode";
+        const remoteUser: string | undefined = devcontainer.remoteUser;
         getOutput().show(true);
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
         await dockerRestartContainer(imageName, ws.uri.fsPath);
 
+        let effectiveUser = remoteUser || (await getContainerUsername(imageName));
+        if (!remoteUser && effectiveUser === "root") {
+          const alt = await detectPreferredNonRootUser(imageName);
+          if (alt) {
+            effectiveUser = alt;
+            vscode.window.showInformationMessage(
+              `Detected default user 'root'; using '${alt}' for SSH. Provide 'remoteUser' to force a specific user.`
+            );
+          }
+        }
         const pubKeyPath = await resolvePublicKeyPath();
         if (pubKeyPath) {
-          await ensureAuthorizedKeyInContainer(imageName, remoteUser, pubKeyPath);
+          await ensureAuthorizedKeyInContainer(imageName, effectiveUser, pubKeyPath);
         }
 
         // Ensure SSH config has a host alias
         const hostAlias = "codium-devcontainer";
-        ensureSshConfigHostAlias(hostAlias, 2222, remoteUser);
+        ensureSshConfigHostAlias(hostAlias, 2222, effectiveUser);
 
         // Ensure an SSH remote extension is available (Microsoft or Positron's Open Remote - SSH)
         await ensureSshRemoteExtensionAvailable();
+
+        // Verify SSH auth before opening Remote-SSH
+        const ok = await verifySshLogin(effectiveUser);
+        if (!ok) {
+          const term = vscode.window.createTerminal({
+            name: "Devcontainer SSH (manual)",
+            shellPath: "ssh",
+            shellArgs: ["-F", "/dev/null", "-p", "2222", `${effectiveUser}@localhost`]
+          });
+          term.show();
+          return;
+        }
 
         // Open the folder over Remote-SSH
         const projectName = path.basename(ws.uri.fsPath);

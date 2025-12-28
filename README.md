@@ -20,7 +20,7 @@ This extension is under development.
 - Docker installed and daemon running.
 - A folder with `.devcontainer/devcontainer.json`.
   - Uses `image` as the base image for the template.
-  - Optional: `remoteUser` for the SSH user (default: `vscode`).
+  - Optional: `remoteUser` for the SSH user. If omitted, the extension detects the container's current user via `docker exec whoami` and uses that for SSH and key setup.
 - A local SSH public key available (e.g., `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`).
 - Optional: Remote - SSH extension (needed only for "Open Folder in Devcontainer (SSH)" to open the folder in a Remote window). If unavailable on your marketplace (e.g., Open VSX/VSCodium), you can still use "Build & Run" or connect via an SSH terminal.
 
@@ -28,8 +28,8 @@ This extension is under development.
 1. Create a devcontainer config:
 ```json
 {
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
-  "remoteUser": "vscode"
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22"
+  // remoteUser is optional; defaults to the container's user (detected via whoami)
 }
 ```
 2. Compile the extension:
@@ -45,7 +45,8 @@ npm run compile
 - The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
 - The `image` in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) becomes the `BASE_IMAGE` for the template.
 - The container exposes SSH on `127.0.0.1:2222`, mounts your folder to `/workspace/<folderName>`, sets the working directory to that path, and starts `sshd`.
-- Your public key is added to `/home/<remoteUser>/.ssh/authorized_keys` inside the container.
+- Your public key is added to `/home/<user>/.ssh/authorized_keys` inside the container, where `<user>` is either `remoteUser` (if set) or the detected container user (`whoami`).
+- If `remoteUser` is provided, it is passed as `USERNAME` build arg to the image; otherwise the base image's default user is used and detected at runtime.
 - An SSH host alias `codium-devcontainer` is appended to `~/.ssh/config`.
 - The extension opens `/workspace/<folderName>` via Remote SSH.
 
@@ -82,7 +83,7 @@ Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from 
 ```bash
 docker rm -f codium-devcontainer-ctr || true
 ```
-- Remote - SSH missing: the command will prompt to install it. If it isn't available in your marketplace, use "Devcontainer: Build & Run" and work via the opened SSH terminal, or manually connect with your preferred SSH client to `vscode@localhost:2222`.
+- Remote - SSH missing: the command will prompt to install it. If it isn't available in your marketplace, use "Devcontainer: Build & Run" and work via the opened SSH terminal, or manually connect with your preferred SSH client to `<user>@localhost:2222` (the user is either `remoteUser` or detected via `whoami`).
 - No public key found: you will be asked to select a `*.pub` key.
 - Docker permissions: ensure your user can run Docker commands without sudo.
 
