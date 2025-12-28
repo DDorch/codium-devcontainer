@@ -3,7 +3,7 @@
   "displayName": "Codium Devcontainer",
   "description": "Build & run a devcontainer using Docker CLI",
   "version": "0.1.1",
-  "publisher": "local",
+  "publisher": "DDorch",
   "license": "MIT",
   "repository": {
     "type": "git",
