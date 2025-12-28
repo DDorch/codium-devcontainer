@@ -9,6 +9,7 @@ type DevcontainerConfig = {
   remoteUser?: string;
   dockerFile?: string;
   postCreateCommand?: string | string[];
+  postStartCommand?: string | string[];
 };
 
 function getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
@@ -367,9 +368,15 @@ export function activate(context: vscode.ExtensionContext) {
     const watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(ws.uri.fsPath, ".devcontainer/devcontainer.json")
     );
-    watcher.onDidCreate(updateDevcontainerContext);
+    watcher.onDidCreate(async () => {
+      await updateDevcontainerContext();
+      await runPostStartCommandOnce(context);
+    });
     watcher.onDidDelete(updateDevcontainerContext);
-    watcher.onDidChange(updateDevcontainerContext);
+    watcher.onDidChange(async () => {
+      await updateDevcontainerContext();
+      await runPostStartCommandOnce(context);
+    });
     context.subscriptions.push(watcher);
   }
 
@@ -582,6 +589,8 @@ export function activate(context: vscode.ExtensionContext) {
     reopenInDevcontainer,
     showMenu
   );
+  // If running in a remote window (SSH), execute postStartCommand in a new terminal once.
+  runPostStartCommandOnce(context);
   async function appendPostCreateToDockerfile(wsPath: string, devcontainer: DevcontainerConfig) {
     const devcontainerDir = path.join(wsPath, ".devcontainer");
     const dockerfileRel = devcontainer.dockerFile || "Dockerfile";
@@ -616,6 +625,71 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // Already added above
+}
+
+async function runPostStartCommandOnce(context: vscode.ExtensionContext) {
+  try {
+    if (!vscode.env.remoteName) return;
+    const ws = getWorkspaceFolder();
+    if (!ws) return;
+    const dev = await readDevcontainerConfigFromWorkspace(ws.uri);
+    if (!dev) return;
+    const postStart = dev.postStartCommand;
+    if (!postStart || (Array.isArray(postStart) && postStart.length === 0)) return;
+    const key = `codiumDevcontainer.postStart.run:${ws.uri.fsPath}`;
+    const already = context.workspaceState.get<boolean>(key);
+    if (already) return;
+    const out = getOutput();
+    out.appendLine("Running postStartCommand in remote terminal...");
+    out.show(true);
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "Devcontainer: Running postStartCommand" },
+      async () => {
+        const term = vscode.window.createTerminal({ name: "Devcontainer: Post Start" });
+        term.show();
+        const cmds: string[] = Array.isArray(postStart) ? postStart : [postStart];
+        for (const c of cmds) {
+          out.appendLine(`postStartCommand: ${c}`);
+          term.sendText(c, true);
+        }
+      }
+    );
+    await context.workspaceState.update(key, true);
+  } catch {
+    // ignore
+  }
+}
+
+async function waitForWorkspaceFile(uri: vscode.Uri, timeoutMs: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return true;
+    } catch {
+      // not found yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readDevcontainerConfigFromWorkspace(wsUri: vscode.Uri): Promise<DevcontainerConfig | undefined> {
+  const uri = vscode.Uri.joinPath(wsUri, ".devcontainer", "devcontainer.json");
+  const ok = await waitForWorkspaceFile(uri, 10000);
+  if (!ok) return undefined;
+  try {
+    const data = await vscode.workspace.fs.readFile(uri);
+    const raw = Buffer.from(data).toString("utf-8");
+    return parseJSONC(raw) as DevcontainerConfig;
+  } catch {
+    return undefined;
+  }
 }
 
 export function deactivate() {}

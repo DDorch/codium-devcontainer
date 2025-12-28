@@ -27,6 +27,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
+  "extensionKind": ["ui", "workspace"],
   "activationEvents": [
     "onStartupFinished",
     "workspaceContains:.devcontainer/devcontainer.json",
