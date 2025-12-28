@@ -2,7 +2,7 @@
   "name": "codium-devcontainer",
   "displayName": "Codium Devcontainer",
   "description": "Build & run a devcontainer using Docker CLI",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -108,7 +108,8 @@
     "assets/**",
     "package.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NEWS.md"
   ],
   "dependencies": {
     "jsonc-parser": "^3.2.0"

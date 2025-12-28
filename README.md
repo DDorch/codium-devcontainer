@@ -8,6 +8,8 @@ This extension is under development.
 **There may be bugs or missing features.**
 **Use at your own risk.**
 
+This project is inspired by Andrew Heiss’s blog post, which demonstrates using Positron to SSH into a Docker container instead of a remote machine: https://www.andrewheiss.com/blog/2025/07/05/positron-ssh-docker/
+
 ## Features
 - Devcontainer: Build & Run — builds an image and runs a container mounting your folder.
 - Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
@@ -104,6 +106,9 @@ npm run compile
   - Template Dockerfile: [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile)
   - Extension manifest: [package.json](package.json)
   - CI workflow: [.github/workflows/release.yml](.github/workflows/release.yml)
+
+## Changelog
+See [NEWS.md](NEWS.md) for release notes.
 
 ## License
 This project is licensed under the MIT License.
