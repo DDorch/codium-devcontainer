@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync, spawn } from "child_process";
 import { parse as parseJSONC } from "jsonc-parser";
+import * as net from "net";
 
 type DevcontainerConfig = {
   image?: string;
@@ -50,6 +51,21 @@ function logCommand(command: string, args: string[]) {
   const printable = [command, ...args].join(" ");
   out.appendLine("");
   out.appendLine(`$ ${printable}`);
+}
+
+async function findFreePort(): Promise<number> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.on("error", () => {
+      // Fallback to a common port if something odd happens
+      resolve(2222);
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 2222;
+      server.close(() => resolve(port));
+    });
+  });
 }
 
 function runCommand(
@@ -135,14 +151,14 @@ async function dockerBuildImage(
   await runCommand("docker", args);
 }
 
-async function dockerRestartContainer(imageName: string, wsFsPath: string) {
+async function dockerRestartContainer(imageName: string, wsFsPath: string, hostPort: number) {
   try {
     await runCommand("docker", ["rm", "-f", `${imageName}-ctr`]);
   } catch {
     // ignore if container did not exist
   }
 
-  vscode.window.showInformationMessage("Starting container with SSH...");
+  vscode.window.showInformationMessage(`Starting container with SSH on localhost:${hostPort}...`);
   getOutput().show(true);
   const projectName = path.basename(wsFsPath);
   await runCommand("docker", [
@@ -151,7 +167,7 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string) {
     "--name",
     `${imageName}-ctr`,
     "-p",
-    "127.0.0.1:2222:22",
+    `127.0.0.1:${hostPort}:22`,
     "-v",
     `${wsFsPath}:/workspace/${projectName}`,
     "-w",
@@ -251,7 +267,7 @@ async function ensureAuthorizedKeyInContainer(imageName: string, user: string, p
   );
 }
 
-async function verifySshLogin(user: string): Promise<boolean> {
+async function verifySshLogin(user: string, port: number): Promise<boolean> {
   const res = await runCommandCapture("ssh", [
     "-F",
     "/dev/null",
@@ -262,7 +278,7 @@ async function verifySshLogin(user: string): Promise<boolean> {
     "-o",
     "UserKnownHostsFile=/dev/null",
     "-p",
-    "2222",
+    String(port),
     `${user}@localhost`,
     "true"
   ]);
@@ -296,20 +312,20 @@ async function getEffectiveUser(imageName: string, remoteUser?: string): Promise
   return user;
 }
 
-async function setupSshAccess(imageName: string, user: string): Promise<boolean> {
+async function setupSshAccess(imageName: string, user: string, port: number): Promise<boolean> {
   const pubKeyPath = await resolvePublicKeyPath();
   if (pubKeyPath) {
     await ensureAuthorizedKeyInContainer(imageName, user, pubKeyPath);
   }
-  const ok = await verifySshLogin(user);
+  const ok = await verifySshLogin(user, port);
   return ok;
 }
 
-function openSshTerminal(title: string, user: string) {
+function openSshTerminal(title: string, user: string, port: number) {
   const sshTerminal = vscode.window.createTerminal({
     name: title,
     shellPath: "ssh",
-    shellArgs: ["-F", "/dev/null", "-p", "2222", `${user}@localhost`]
+    shellArgs: ["-F", "/dev/null", "-p", String(port), `${user}@localhost`]
   });
   sshTerminal.show();
 }
@@ -320,20 +336,23 @@ function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string)
   const sshConfigPath = path.join(sshDir, "config");
   fs.mkdirSync(sshDir, { recursive: true });
   let configText = fs.existsSync(sshConfigPath) ? fs.readFileSync(sshConfigPath, "utf-8") : "";
-  const hostBlockHeader = new RegExp(`^Host\\s+${hostAlias}(\\s|$)`, "m");
-  if (!hostBlockHeader.test(configText)) {
-    const block = [
-      `Host ${hostAlias}`,
-      `  HostName 127.0.0.1`,
-      `  Port ${port}`,
-      `  User ${user}`,
-      `  StrictHostKeyChecking no`,
-      `  UserKnownHostsFile /dev/null`,
-      ""
-    ].join("\n");
+  const block = [
+    `Host ${hostAlias}`,
+    `  HostName 127.0.0.1`,
+    `  Port ${port}`,
+    `  User ${user}`,
+    `  StrictHostKeyChecking no`,
+    `  UserKnownHostsFile /dev/null`,
+    ""
+  ].join("\n");
+
+  const blockRegex = new RegExp(`^Host\\s+${hostAlias}[\\s\\S]*?(?=^Host\\s+|\\Z)`, "m");
+  if (blockRegex.test(configText)) {
+    configText = configText.replace(blockRegex, block);
+  } else {
     configText += (configText.endsWith("\n") ? "" : "\n") + block;
-    fs.writeFileSync(sshConfigPath, configText, { mode: 0o600 });
   }
+  fs.writeFileSync(sshConfigPath, configText, { mode: 0o600 });
 }
 
 async function ensureSshRemoteExtensionAvailable() {
@@ -408,13 +427,14 @@ export function activate(context: vscode.ExtensionContext) {
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
+        const port = await findFreePort();
 
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
-        await dockerRestartContainer(imageName, ws.uri.fsPath);
+        await dockerRestartContainer(imageName, ws.uri.fsPath, port);
 
         const detectedUser = await getEffectiveUser(imageName);
-        await setupSshAccess(imageName, detectedUser);
-        openSshTerminal("Devcontainer SSH", detectedUser);
+        await setupSshAccess(imageName, detectedUser, port);
+        openSshTerminal("Devcontainer SSH", detectedUser, port);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
       }
@@ -497,28 +517,29 @@ export function activate(context: vscode.ExtensionContext) {
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
+        const port = await findFreePort();
         getOutput().show(true);
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-        await dockerRestartContainer(imageName, ws.uri.fsPath);
+        await dockerRestartContainer(imageName, ws.uri.fsPath, port);
 
         const effectiveUser = await getEffectiveUser(imageName, remoteUser);
-        const ok = await setupSshAccess(imageName, effectiveUser);
+        const ok = await setupSshAccess(imageName, effectiveUser, port);
 
         // Ensure SSH config has a host alias
-        const hostAlias = "codium-devcontainer";
-        ensureSshConfigHostAlias(hostAlias, 2222, effectiveUser);
+        const projectName = path.basename(ws.uri.fsPath);
+        const hostAlias = `codium-devcontainer-${projectName.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+        ensureSshConfigHostAlias(hostAlias, port, effectiveUser);
 
         // Ensure an SSH remote extension is available (Microsoft or Positron's Open Remote - SSH)
         await ensureSshRemoteExtensionAvailable();
 
         // Verify SSH auth before opening Remote-SSH
         if (!ok) {
-          openSshTerminal("Devcontainer SSH (manual)", effectiveUser);
+          openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port);
           return;
         }
 
         // Open the folder over Remote-SSH
-        const projectName = path.basename(ws.uri.fsPath);
         const remoteUri = vscode.Uri.parse(
           `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
         );
