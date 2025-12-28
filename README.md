@@ -98,9 +98,10 @@ docker rm -f codium-devcontainer-ctr || true
 npm run compile
 ```
 - Release (CI):
-  - Push a tag `vX.Y.Z` matching `package.json` version.
-  - GitHub Actions builds the VSIX and creates a release attaching the `.vsix`.
-  - Manual trigger available via the workflow dispatch if needed.
+  - Push a tag `vX.Y.Z` that matches the version in `package.json` and create a GitHub release.
+  - The workflow at [.github/workflows/publish-open-vsx.yml](.github/workflows/publish-open-vsx.yml) compiles, packages, and publishes the extension to Open VSX.
+  - Requires a repository secret `OVSX_TOKEN` (Open VSX access token). Generate it from your Open VSX account and add it under Settings → Secrets and variables → Actions.
+  - Manual trigger is available via the workflow dispatch if needed.
 - Project files:
   - Extension entry: [src/extension.ts](src/extension.ts)
   - Template Dockerfile: [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile)
