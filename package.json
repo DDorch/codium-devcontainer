@@ -2,7 +2,7 @@
   "name": "codium-devcontainer",
   "displayName": "Codium Devcontainer",
   "description": "Build & run a devcontainer using Docker CLI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local",
   "license": "MIT",
   "repository": {

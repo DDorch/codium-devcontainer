@@ -1,5 +1,10 @@
 # codium-devcontainer News
 
+## 0.1.1 — 2025-12-28
+
+Fixes
+- [#5](https://github.com/DDorch/codium-devcontainer/issues/5): postStartCommand not working (Open).
+
 ## 0.1.0 — 2025-12-28
 
 Enhancements
