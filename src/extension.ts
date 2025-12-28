@@ -68,6 +68,16 @@ async function findFreePort(): Promise<number> {
   });
 }
 
+function makeWorkspaceSlug(wsFsPath: string): string {
+  const projectName = path.basename(wsFsPath);
+  return projectName.replace(/[^a-zA-Z0-9_-]+/g, "-");
+}
+
+function getContainerName(imageName: string, wsFsPath: string): string {
+  const slug = makeWorkspaceSlug(wsFsPath);
+  return `${imageName}-${slug}`;
+}
+
 function runCommand(
   command: string,
   args: string[],
@@ -151,9 +161,14 @@ async function dockerBuildImage(
   await runCommand("docker", args);
 }
 
-async function dockerRestartContainer(imageName: string, wsFsPath: string, hostPort: number) {
+async function dockerRestartContainer(
+  imageName: string,
+  wsFsPath: string,
+  hostPort: number,
+  containerName: string
+) {
   try {
-    await runCommand("docker", ["rm", "-f", `${imageName}-ctr`]);
+    await runCommand("docker", ["rm", "-f", containerName]);
   } catch {
     // ignore if container did not exist
   }
@@ -165,7 +180,7 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string, hostP
     "run",
     "-d",
     "--name",
-    `${imageName}-ctr`,
+    containerName,
     "-p",
     `127.0.0.1:${hostPort}:22`,
     "-v",
@@ -176,8 +191,8 @@ async function dockerRestartContainer(imageName: string, wsFsPath: string, hostP
   ]);
 }
 
-async function getContainerUsername(imageName: string): Promise<string> {
-  const result = await runCommandCapture("docker", ["exec", `${imageName}-ctr`, "whoami"]);
+async function getContainerUsername(containerName: string): Promise<string> {
+  const result = await runCommandCapture("docker", ["exec", containerName, "whoami"]);
   if (result.code === 0 && result.stdout.trim()) {
     return result.stdout.trim();
   }
@@ -187,11 +202,11 @@ async function getContainerUsername(imageName: string): Promise<string> {
   return "root";
 }
 
-async function detectPreferredNonRootUser(imageName: string): Promise<string | undefined> {
+async function detectPreferredNonRootUser(containerName: string): Promise<string | undefined> {
   // Try to find a typical login user (uid >= 1000) from /etc/passwd
   const res1 = await runCommandCapture("docker", [
     "exec",
-    `${imageName}-ctr`,
+    containerName,
     "bash",
     "-lc",
     "awk -F: '$3>=1000 && $1!=\"nobody\" {print $1}' /etc/passwd | head -n1"
@@ -202,7 +217,7 @@ async function detectPreferredNonRootUser(imageName: string): Promise<string | u
   // Fallback: pick the first directory name under /home
   const res2 = await runCommandCapture("docker", [
     "exec",
-    `${imageName}-ctr`,
+    containerName,
     "bash",
     "-lc",
     "ls -1 /home 2>/dev/null | head -n1"
@@ -212,10 +227,10 @@ async function detectPreferredNonRootUser(imageName: string): Promise<string | u
   return undefined;
 }
 
-async function getUserHome(imageName: string, user: string): Promise<string> {
+async function getUserHome(containerName: string, user: string): Promise<string> {
   const res = await runCommandCapture("docker", [
     "exec",
-    `${imageName}-ctr`,
+    containerName,
     "bash",
     "-lc",
     `eval echo ~${user}`
@@ -250,11 +265,11 @@ async function resolvePublicKeyPath(): Promise<string | undefined> {
   return pubKeyPath;
 }
 
-async function ensureAuthorizedKeyInContainer(imageName: string, user: string, pubKeyPath: string) {
-  const home = await getUserHome(imageName, user);
+async function ensureAuthorizedKeyInContainer(containerName: string, user: string, pubKeyPath: string) {
+  const home = await getUserHome(containerName, user);
   await runCommand("docker", [
     "exec",
-    `${imageName}-ctr`,
+    containerName,
     "bash",
     "-lc",
     `mkdir -p ${home}/.ssh && chmod 700 ${home}/.ssh && touch ${home}/.ssh/authorized_keys && chmod 600 ${home}/.ssh/authorized_keys && chown -R ${user}:${user} ${home}/.ssh`
@@ -262,7 +277,7 @@ async function ensureAuthorizedKeyInContainer(imageName: string, user: string, p
   const keyData = fs.readFileSync(pubKeyPath, "utf-8").trim() + "\n";
   await runCommand(
     "docker",
-    ["exec", "-i", `${imageName}-ctr`, "bash", "-lc", `cat >> ${home}/.ssh/authorized_keys`],
+    ["exec", "-i", containerName, "bash", "-lc", `cat >> ${home}/.ssh/authorized_keys`],
     { input: keyData }
   );
 }
@@ -295,13 +310,13 @@ async function verifySshLogin(user: string, port: number): Promise<boolean> {
   return false;
 }
 
-async function getEffectiveUser(imageName: string, remoteUser?: string): Promise<string> {
+async function getEffectiveUser(containerName: string, remoteUser?: string): Promise<string> {
   if (remoteUser) {
     return remoteUser;
   }
-  let user = await getContainerUsername(imageName);
+  let user = await getContainerUsername(containerName);
   if (user === "root") {
-    const alt = await detectPreferredNonRootUser(imageName);
+    const alt = await detectPreferredNonRootUser(containerName);
     if (alt) {
       user = alt;
       vscode.window.showInformationMessage(
@@ -312,10 +327,10 @@ async function getEffectiveUser(imageName: string, remoteUser?: string): Promise
   return user;
 }
 
-async function setupSshAccess(imageName: string, user: string, port: number): Promise<boolean> {
+async function setupSshAccess(containerName: string, user: string, port: number): Promise<boolean> {
   const pubKeyPath = await resolvePublicKeyPath();
   if (pubKeyPath) {
-    await ensureAuthorizedKeyInContainer(imageName, user, pubKeyPath);
+    await ensureAuthorizedKeyInContainer(containerName, user, pubKeyPath);
   }
   const ok = await verifySshLogin(user, port);
   return ok;
@@ -428,12 +443,13 @@ export function activate(context: vscode.ExtensionContext) {
         const imageName = "codium-devcontainer";
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const port = await findFreePort();
+        const containerName = getContainerName(imageName, ws.uri.fsPath);
 
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
-        await dockerRestartContainer(imageName, ws.uri.fsPath, port);
+        await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
-        const detectedUser = await getEffectiveUser(imageName);
-        await setupSshAccess(imageName, detectedUser, port);
+        const detectedUser = await getEffectiveUser(containerName);
+        await setupSshAccess(containerName, detectedUser, port);
         openSshTerminal("Devcontainer SSH", detectedUser, port);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
@@ -518,12 +534,13 @@ export function activate(context: vscode.ExtensionContext) {
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
         const port = await findFreePort();
+        const containerName = getContainerName(imageName, ws.uri.fsPath);
         getOutput().show(true);
         await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-        await dockerRestartContainer(imageName, ws.uri.fsPath, port);
+        await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
-        const effectiveUser = await getEffectiveUser(imageName, remoteUser);
-        const ok = await setupSshAccess(imageName, effectiveUser, port);
+        const effectiveUser = await getEffectiveUser(containerName, remoteUser);
+        const ok = await setupSshAccess(containerName, effectiveUser, port);
 
         // Ensure SSH config has a host alias
         const projectName = path.basename(ws.uri.fsPath);
