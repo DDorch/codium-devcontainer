@@ -3,7 +3,15 @@ name: Publish to Open VSX
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      tagName:
+        description: 'Tag name to publish (e.g., v0.2.0)'
+        required: false
+        type: string
 
 jobs:
   publish-open-vsx:
@@ -17,10 +25,26 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Determine tag name
+        id: tag
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tagName }}" ]; then
+            TAG="${{ inputs.tagName }}"
+          else
+            echo "This workflow must run for a release, a tag push, or provide 'tagName' input." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Validate tag matches package.json version
         run: |
           set -e
-          TAG_REF="${GITHUB_REF##*/}"
+          TAG_REF="${{ steps.tag.outputs.tag }}"
           TAG="${TAG_REF#v}"
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Release tag: ${TAG_REF}"
