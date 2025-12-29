@@ -33,7 +33,7 @@ has_active_ssh() {
 }
 
 CHECK_INTERVAL=${CHECK_INTERVAL:-2}
-IDLE_GRACE_SECONDS=${IDLE_GRACE_SECONDS:-20}
+IDLE_GRACE_SECONDS=${IDLE_GRACE_SECONDS:-60}
 idle_elapsed=0
 
 # Poll for stop file or idle ssh

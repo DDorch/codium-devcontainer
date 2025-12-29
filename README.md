@@ -2,14 +2,6 @@
 
 Build and run a devcontainer using a Docker image, then open your folder over SSH in the container.
 
-## Disclaimer
-
-This extension is under development.
-**There may be bugs or missing features.**
-**Use at your own risk.**
-
-This project is inspired by Andrew Heiss’s blog post, which demonstrates using Positron to SSH into a Docker container instead of a remote machine: https://www.andrewheiss.com/blog/2025/07/05/positron-ssh-docker/
-
 ## Features
 - Devcontainer: Build & Run — builds an image and runs a container mounting your folder.
 - Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
@@ -64,11 +56,22 @@ npm run compile
 ## How it Works
 - The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
 - The `image` in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) becomes the `BASE_IMAGE` for the template.
-- The container exposes SSH on `127.0.0.1:2222`, mounts your folder to `/workspace/<folderName>`, sets the working directory to that path, and starts `sshd`.
+- The container exposes SSH on `127.0.0.1:<port>`, mounts your folder to `/workspace/<folderName>`, sets the working directory to that path, and starts `sshd`.
 - Your public key is added to `/home/<user>/.ssh/authorized_keys` inside the container, where `<user>` is either `remoteUser` (if set) or the detected container user (`whoami`).
 - If `remoteUser` is provided, it is passed as `USERNAME` build arg to the image; otherwise the base image's default user is used and detected at runtime.
-- An SSH host alias `codium-devcontainer` is appended to `~/.ssh/config`.
+- If `postCreateCommand` is set in the devcontainer config, it runs as part of the Docker build (idempotent).
+- A random available port is chosen for SSH.
+- An SSH host alias `codium-devcontainer-<projectName>` is appended to `~/.ssh/config`.
 - The extension opens `/workspace/<folderName>` via Remote SSH.
+- If `postStartCommand` is set in the devcontainer config, it runs in the remote terminal after connection.
+- The container auto-stops when the SSH session closes or after being idle for ~60 seconds by default. You can change the idle timeout via the `IDLE_GRACE_SECONDS` environment variable.
+
+## Limitations
+- Only work on docker images based on Debian/Ubuntu (uses `apt` to install `openssh-server`).
+- Only single-container configurations are supported (no docker compose)
+- No tools or templates are supplied for creating or authoring devcontainer.json files
+- Only one container is supported per project (Re-open in Devcontainer will rebuild/run the same container)
+- Docker volumes are not supported, just regular mounts
 
 ## Testing in Positron
 If Positron is installed and on PATH:
@@ -119,3 +122,9 @@ See [NEWS.md](NEWS.md) for release notes.
 This project is licensed under the MIT License.
 
 See [LICENSE](LICENSE) for the full text.
+
+## Acknowledgements
+
+This extension is inspired by Andrew Heiss’s blog post:
+
+Heiss, Andrew. 2025. “Use Positron to Run R Inside a Docker Image Through SSH.” July 5, 2025. https://doi.org/10.59350/fredm-56671.
