@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync, spawn } from "child_process";
-import { parse as parseJSONC } from "jsonc-parser";
+import JSON5 from "json5";
 import * as net from "net";
 
 type DevcontainerConfig = {
@@ -31,7 +31,7 @@ function readDevcontainerConfig(wsFsPath: string): DevcontainerConfig {
     throw new Error("No devcontainer.json found");
   }
   const raw = fs.readFileSync(devcontainerPath, "utf-8");
-  return parseJSONC(raw) as DevcontainerConfig;
+  return JSON5.parse(raw) as DevcontainerConfig;
 }
 
 function getTemplateDockerfilePath(ctx: vscode.ExtensionContext): string {
@@ -839,7 +839,7 @@ async function readDevcontainerConfigFromWorkspace(wsUri: vscode.Uri): Promise<D
   try {
     const data = await vscode.workspace.fs.readFile(uri);
     const raw = Buffer.from(data).toString("utf-8");
-    return parseJSONC(raw) as DevcontainerConfig;
+    return JSON5.parse(raw) as DevcontainerConfig;
   } catch {
     return undefined;
   }
