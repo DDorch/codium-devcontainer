@@ -23,11 +23,13 @@
     "remote",
     "containers"
   ],
-
   "engines": {
     "vscode": "^1.85.0"
   },
-  "extensionKind": ["ui", "workspace"],
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "workspaceContains:.devcontainer/devcontainer.json",
@@ -67,9 +69,15 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "codiumDevcontainer.showMenu" },
-        { "command": "codiumDevcontainer.openDevcontainerConfig" },
-        { "command": "codiumDevcontainer.reopenInDevcontainer" }
+        {
+          "command": "codiumDevcontainer.showMenu"
+        },
+        {
+          "command": "codiumDevcontainer.openDevcontainerConfig"
+        },
+        {
+          "command": "codiumDevcontainer.reopenInDevcontainer"
+        }
       ],
       "explorer/context": [
         {
@@ -99,9 +107,14 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "compile": "tsc -p .",
-    "watch": "tsc -p . -w",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && node esbuild.js",
+    "check-types": "tsc --noEmit",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "node esbuild.js --production",
+    "vsce:package": "vsce package"
   },
   "files": [
     "dist/**",
@@ -118,6 +131,8 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.2",
+    "npm-run-all": "^4.1.5",
     "typescript": "^5.3.0"
   }
 }
