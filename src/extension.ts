@@ -943,8 +943,9 @@ async function runPostStartCommandOnce(context: vscode.ExtensionContext) {
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Devcontainer: Running postStartCommand" },
       async () => {
+        await vscode.commands.executeCommand("workbench.action.closePanel");
         const term = vscode.window.createTerminal({ name: "Devcontainer: Post Start" });
-        term.show();
+        term.show(false);
         const cmds: string[] = Array.isArray(postStart) ? postStart : [postStart];
         for (const c of cmds) {
           out.appendLine(`postStartCommand: ${c}`);
