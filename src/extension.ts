@@ -226,6 +226,34 @@ async function ensureContainerStarted(name: string): Promise<void> {
   });
 }
 
+function getDevcontainerMtimeMs(wsFsPath: string): number | undefined {
+  try {
+    const st = fs.statSync(getDevcontainerPath(wsFsPath));
+    return st.mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getContainerCreatedMs(name: string): Promise<number | undefined> {
+  const res = await runCommandCapture("docker", [
+    "inspect",
+    "-f",
+    "{{.Created}}",
+    name
+  ]);
+  if (res.code !== 0) return undefined;
+  const iso = res.stdout.trim();
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+async function shouldRebuildForDevcontainer(wsFsPath: string, name: string): Promise<boolean> {
+  const dcMtime = getDevcontainerMtimeMs(wsFsPath);
+  const createdMs = await getContainerCreatedMs(name);
+  return dcMtime !== undefined && createdMs !== undefined && dcMtime > createdMs;
+}
+
 async function getContainerUsername(containerName: string): Promise<string> {
   const result = await runCommandCapture("docker", ["exec", containerName, "whoami"]);
   if (result.code === 0 && result.stdout.trim()) {
@@ -601,10 +629,26 @@ export function activate(context: vscode.ExtensionContext) {
         const exists = await containerExists(containerName);
         let port: number | undefined;
         if (exists) {
+          const rebuildNeeded = await shouldRebuildForDevcontainer(ws.uri.fsPath, containerName);
+          let userWantsRebuild = rebuildNeeded;
+          if (rebuildNeeded) {
+            const choice = await vscode.window.showInformationMessage(
+
+              "devcontainer.json changed since the container was created. Rebuild to apply changes?",
+              { modal: true },
+              "Rebuild",
+              "Reuse",
+              "Cancel"
+            );
+            if (choice === "Cancel" || !choice) {
+              return;
+            }
+            userWantsRebuild = choice === "Rebuild";
+          }
           await ensureContainerStarted(containerName);
           port = await getMappedSshPort(containerName);
-          if (!port) {
-            port = await findFreePort();
+          if (userWantsRebuild || !port) {
+            port = port || (await findFreePort());
             await stageEntrypointTemporarily(context, ws.uri.fsPath);
             try {
               await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
