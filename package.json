@@ -35,10 +35,9 @@
     "workspaceContains:.devcontainer/devcontainer.json",
     "onCommand:codiumDevcontainer.buildAndRun",
     "onCommand:codiumDevcontainer.addDockerfileTemplate",
-    "onCommand:codiumDevcontainer.openWorkspaceInDevcontainer",
+    "onCommand:codiumDevcontainer.openFolderInDevcontainer",
     "onCommand:codiumDevcontainer.showMenu",
-    "onCommand:codiumDevcontainer.openDevcontainerConfig",
-    "onCommand:codiumDevcontainer.reopenInDevcontainer"
+    "onCommand:codiumDevcontainer.openDevcontainerConfig"
   ],
   "contributes": {
     "commands": [
@@ -51,7 +50,7 @@
         "title": "Devcontainer: Add Dockerfile Template"
       },
       {
-        "command": "codiumDevcontainer.openWorkspaceInDevcontainer",
+        "command": "codiumDevcontainer.openFolderInDevcontainer",
         "title": "Devcontainer: Open Folder in Devcontainer (SSH)"
       },
       {
@@ -61,11 +60,8 @@
       {
         "command": "codiumDevcontainer.openDevcontainerConfig",
         "title": "Devcontainer: Open Devcontainer Configuration"
-      },
-      {
-        "command": "codiumDevcontainer.reopenInDevcontainer",
-        "title": "Devcontainer: Reopen in Devcontainer"
       }
+
     ],
     "menus": {
       "commandPalette": [
@@ -76,7 +72,7 @@
           "command": "codiumDevcontainer.openDevcontainerConfig"
         },
         {
-          "command": "codiumDevcontainer.reopenInDevcontainer"
+          "command": "codiumDevcontainer.openFolderInDevcontainer"
         }
       ],
       "explorer/context": [
@@ -86,7 +82,7 @@
           "when": "codiumDevcontainer.hasConfig"
         },
         {
-          "command": "codiumDevcontainer.reopenInDevcontainer",
+          "command": "codiumDevcontainer.openFolderInDevcontainer",
           "group": "2_workspace",
           "when": "codiumDevcontainer.hasConfig"
         }
@@ -98,7 +94,7 @@
           "when": "!remoteName && codiumDevcontainer.hasConfig"
         },
         {
-          "command": "codiumDevcontainer.reopenInDevcontainer",
+          "command": "codiumDevcontainer.openFolderInDevcontainer",
           "group": "remote_20_ssh_3local@9",
           "when": "!remoteName && codiumDevcontainer.hasConfig"
         }

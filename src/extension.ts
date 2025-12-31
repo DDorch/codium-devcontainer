@@ -556,7 +556,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   const openWorkspaceInDevcontainer = vscode.commands.registerCommand(
-    "codiumDevcontainer.openWorkspaceInDevcontainer",
+    "codiumDevcontainer.openFolderInDevcontainer",
     async () => {
       try {
         const ws = getWorkspaceFolder();
@@ -635,12 +635,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  const reopenInDevcontainer = vscode.commands.registerCommand(
-    "codiumDevcontainer.reopenInDevcontainer",
-    async () => {
-      await vscode.commands.executeCommand("codiumDevcontainer.openWorkspaceInDevcontainer");
-    }
-  );
+
 
   const showMenu = vscode.commands.registerCommand(
     "codiumDevcontainer.showMenu",
@@ -652,8 +647,8 @@ export function activate(context: vscode.ExtensionContext) {
           ? { label: "$(gear) Open Devcontainer Configuration", detail: ".devcontainer/devcontainer.json" }
           : { label: "$(gear) Open Devcontainer Configuration", description: "(no devcontainer.json)" },
         has
-          ? { label: "$(refresh) Reopen in Devcontainer", detail: "Build and open folder over SSH" }
-          : { label: "$(circle-slash) Reopen in Devcontainer", description: "(requires .devcontainer/devcontainer.json)" }
+          ? { label: "$(refresh) Open Folder in Devcontainer (SSH)", detail: "Build and open folder over SSH" }
+          : { label: "$(circle-slash) Open Folder in Devcontainer (SSH)", description: "(requires .devcontainer/devcontainer.json)" }
       ];
       const chosen = await vscode.window.showQuickPick(picks, {
         title: "Codium Devcontainer",
@@ -668,14 +663,14 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         await vscode.commands.executeCommand("codiumDevcontainer.openDevcontainerConfig");
-      } else if (chosen.label.includes("Reopen in Devcontainer")) {
+      } else if (chosen.label.includes("Open Folder in Devcontainer")) {
         if (!has) {
           vscode.window.showInformationMessage(
             "Cannot reopen in devcontainer: .devcontainer/devcontainer.json is missing."
           );
           return;
         }
-        await vscode.commands.executeCommand("codiumDevcontainer.reopenInDevcontainer");
+        await vscode.commands.executeCommand("codiumDevcontainer.openFolderInDevcontainer");
       }
     }
   );
@@ -685,7 +680,6 @@ export function activate(context: vscode.ExtensionContext) {
     addDockerfileTemplate,
     openWorkspaceInDevcontainer,
     openDevcontainerConfig,
-    reopenInDevcontainer,
     showMenu
   );
   // If running in a remote window (SSH), execute postStartCommand in a new terminal once.

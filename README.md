@@ -8,7 +8,7 @@ Build and run a devcontainer using a Docker image, then open your folder over SS
 - Devcontainer: Open Folder in Devcontainer (SSH) — builds an SSH-enabled image from the template, runs the container, configures keys, and opens the folder via Remote SSH.
 - Remote Indicator menu entries — in the bottom-left Remote menu:
   - Open Devcontainer Configuration
-  - Reopen in Devcontainer
+  - Open Folder in Devcontainer (SSH)
 
 ## Installation
 - From Open VSX Marketplace (recommended for VSCodium/Positron/Theia):
@@ -73,23 +73,14 @@ npm run compile
 - Only one container is supported per project (Re-open in Devcontainer will rebuild/run the same container)
 - Docker volumes are not supported, just regular mounts
 
-## Testing in Positron
-If Positron is installed and on PATH:
-```bash
-positron --extensionDevelopmentPath="$PWD"
-```
-If not available, test in VS Code similarly:
-```bash
-code --extensionDevelopmentPath="$PWD"
-```
-Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from the Command Palette.
+## Testing Locally
+See contributing guide for local testing instructions.
 
 ## Commands
 - Devcontainer: Add Dockerfile Template — creates `.devcontainer/Dockerfile` from [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile).
 - Devcontainer: Build & Run — builds (if needed) and runs the container, then opens a Docker exec terminal.
 - Devcontainer: Open Folder in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs with SSH on port 2222, configures your key, and opens the folder over SSH.
 - Devcontainer: Open Devcontainer Configuration — opens `.devcontainer/devcontainer.json`.
-- Devcontainer: Reopen in Devcontainer — builds and reopens the current folder in the devcontainer.
   - Note: Explorer context menu entries appear only when `.devcontainer/devcontainer.json` exists in the current folder.
 
 ## Troubleshooting
@@ -99,21 +90,8 @@ Open your folder and run "Devcontainer: Open Folder in Devcontainer (SSH)" from 
 - No public key found: you will be asked to select a `*.pub` key.
 - Docker permissions: ensure your user can run Docker commands without sudo.
 
-## Development
-- Compile:
-```bash
-npm run compile
-```
-- Release (CI):
-  - Push a tag `vX.Y.Z` that matches the version in `package.json` and create a GitHub release.
-  - The workflow at [.github/workflows/publish-open-vsx.yml](.github/workflows/publish-open-vsx.yml) compiles, packages, and publishes the extension to Open VSX.
-  - Requires a repository secret `OVSX_TOKEN` (Open VSX access token). Generate it from your Open VSX account and add it under Settings → Secrets and variables → Actions.
-  - Manual trigger is available via the workflow dispatch if needed.
-- Project files:
-  - Extension entry: [src/extension.ts](src/extension.ts)
-  - Template Dockerfile: [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile)
-  - Extension manifest: [package.json](package.json)
-  - CI workflow: [.github/workflows/release.yml](.github/workflows/release.yml)
+## Contributing
+Development setup, testing, packaging, and release instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Changelog
 See [NEWS.md](NEWS.md) for release notes.
