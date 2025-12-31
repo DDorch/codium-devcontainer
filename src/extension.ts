@@ -555,7 +555,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  const openWorkspaceInDevcontainer = vscode.commands.registerCommand(
+  const openFolderInDevcontainer = vscode.commands.registerCommand(
     "codiumDevcontainer.openFolderInDevcontainer",
     async () => {
       try {
@@ -678,7 +678,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     buildAndRun,
     addDockerfileTemplate,
-    openWorkspaceInDevcontainer,
+    openFolderInDevcontainer,
     openDevcontainerConfig,
     showMenu
   );
