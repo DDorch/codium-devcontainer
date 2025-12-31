@@ -77,9 +77,14 @@ function makeWorkspaceSlug(wsFsPath: string): string {
   return projectName.replace(/[^a-zA-Z0-9_-]+/g, "-");
 }
 
-function getContainerName(imageName: string, wsFsPath: string): string {
+function getImageName(wsFsPath: string): string {
   const slug = makeWorkspaceSlug(wsFsPath);
-  return `${imageName}-${slug}`;
+  return `codium-devcontainer-${slug}`;
+}
+
+function getContainerName(wsFsPath: string): string {
+  const slug = makeWorkspaceSlug(wsFsPath);
+  return `codium-devcontainer-${slug}`;
 }
 
 function runCommand(
@@ -464,10 +469,10 @@ export function activate(context: vscode.ExtensionContext) {
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         await stageEntrypointTemporarily(context, ws.uri.fsPath);
-        const imageName = "codium-devcontainer";
+        const imageName = getImageName(ws.uri.fsPath);
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const port = await findFreePort();
-        const containerName = getContainerName(imageName, ws.uri.fsPath);
+        const containerName = getContainerName(ws.uri.fsPath);
 
         try {
           await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
@@ -568,11 +573,11 @@ export function activate(context: vscode.ExtensionContext) {
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         await stageEntrypointTemporarily(context, ws.uri.fsPath);
-        const imageName = "codium-devcontainer";
+        const imageName = getImageName(ws.uri.fsPath);
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
         const port = await findFreePort();
-        const containerName = getContainerName(imageName, ws.uri.fsPath);
+        const containerName = getContainerName(ws.uri.fsPath);
         getOutput().show(true);
         try {
           await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
