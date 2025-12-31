@@ -1,5 +1,13 @@
 # codium-devcontainer News
 
+## 0.2.1 — 2025-12-31
+
+Enhancements
+- [#11](https://github.com/DDorch/codium-devcontainer/issues/11): Simplify extension action list
+
+Fixes
+- [#9](https://github.com/DDorch/codium-devcontainer/issues/9): Extension not working on Windows; activation error "Cannot find module 'jsonc-parser'".
+
 ## 0.2.0 — 2025-12-28
 
 Enhancements
