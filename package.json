@@ -103,13 +103,15 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && node esbuild.js",
+    "vscode:prepublish": "npm run build:prod",
+    "compile": "npm run check-types && npm run build",
     "check-types": "tsc --noEmit",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "build:prod": "node esbuild.js --production",
+    "package": "npm run build:prod",
     "vsce:package": "vsce package"
   },
   "files": [

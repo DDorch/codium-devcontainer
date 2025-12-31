@@ -61,7 +61,7 @@ jobs:
         run: npm run compile
 
       - name: Package VSIX
-        run: npm run package
+        run: npm run vsce:package
 
       - name: Publish to Open VSX
         env:

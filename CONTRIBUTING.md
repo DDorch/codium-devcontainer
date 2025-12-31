@@ -23,8 +23,10 @@ npm ci
 
 ### Build and Type-Check
 ```bash
-npm run check-types
-npm run compile
+npm run check-types      # TypeScript only (no emit)
+npm run build            # Dev build (fast, no minify)
+npm run build:prod       # Production build (minified)
+npm run compile          # Type-check + dev build
 # Watch mode during development
 npm run watch
 ```
@@ -70,11 +72,7 @@ Please include:
 - Relevant `/.devcontainer/devcontainer.json` fields (`image`, `remoteUser`, `post*Command`)
 
 ## Packaging
-Create a production build and bundle assets:
-```bash
-npm run package
-```
-Optionally produce a VSIX with `vsce`:
+Produce a VSIX (runs production build via prepublish hook):
 ```bash
 npm run vsce:package
 ```
