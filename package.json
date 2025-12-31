@@ -37,7 +37,8 @@
     "onCommand:codiumDevcontainer.addDockerfileTemplate",
     "onCommand:codiumDevcontainer.openFolderInDevcontainer",
     "onCommand:codiumDevcontainer.showMenu",
-    "onCommand:codiumDevcontainer.openDevcontainerConfig"
+    "onCommand:codiumDevcontainer.openDevcontainerConfig",
+    "onCommand:codiumDevcontainer.rebuildAndOpen"
   ],
   "contributes": {
     "commands": [
@@ -60,8 +61,11 @@
       {
         "command": "codiumDevcontainer.openDevcontainerConfig",
         "title": "Devcontainer: Open Devcontainer Configuration"
+      },
+      {
+        "command": "codiumDevcontainer.rebuildAndOpen",
+        "title": "Devcontainer: Rebuild & Open"
       }
-
     ],
     "menus": {
       "commandPalette": [
@@ -73,6 +77,9 @@
         },
         {
           "command": "codiumDevcontainer.openFolderInDevcontainer"
+        },
+        {
+          "command": "codiumDevcontainer.rebuildAndOpen"
         }
       ],
       "explorer/context": [
@@ -87,15 +94,20 @@
           "when": "codiumDevcontainer.hasConfig"
         }
       ],
-      "statusBar/remoteIndicator": [
+"statusBar/remoteIndicator": [
         {
           "command": "codiumDevcontainer.openDevcontainerConfig",
-          "group": "remote_20_ssh_3local@8",
+          "group": "remote_30_devcontainer_3local@1",
           "when": "!remoteName && codiumDevcontainer.hasConfig"
         },
         {
           "command": "codiumDevcontainer.openFolderInDevcontainer",
-          "group": "remote_20_ssh_3local@9",
+          "group": "remote_30_devcontainer_3local@2",
+          "when": "!remoteName && codiumDevcontainer.hasConfig"
+        },
+        {
+          "command": "codiumDevcontainer.rebuildAndOpen",
+          "group": "remote_30_devcontainer_3local@3",
           "when": "!remoteName && codiumDevcontainer.hasConfig"
         }
       ]
