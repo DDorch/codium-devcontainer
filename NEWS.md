@@ -1,5 +1,16 @@
 # codium-devcontainer News
 
+## 0.3.0 — 2026-01-02
+
+Enhancements
+- [#13](https://github.com/DDorch/codium-devcontainer/issues/13): Reuse existing container instead of recreating it each time
+- [#12](https://github.com/DDorch/codium-devcontainer/issues/12): Use per-project Docker image names for clarity
+- [#14](https://github.com/DDorch/codium-devcontainer/issues/14): Auto-detect when an existing container needs rebuilding
+- [#15](https://github.com/DDorch/codium-devcontainer/issues/15): Focus terminal when `postStartCommand` runs for deterministic UX
+
+Fixes
+- [#16](https://github.com/DDorch/codium-devcontainer/issues/16): Rebuild fails when container is already running; prompt and safely stop before recreate
+
 ## 0.2.1 — 2025-12-31
 
 Enhancements

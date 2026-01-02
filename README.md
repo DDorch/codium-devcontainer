@@ -1,14 +1,14 @@
-# Codium Devcontainer (VS Code Extension)
+# Codium Devcontainer
 
-Build and run a devcontainer using a Docker image, then open your folder over SSH in the container.
+Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and similar IDEs. Uses Docker + SSH to build/run a container and open your folder inside it.
 
 ## Features
-- Devcontainer: Build & Run — builds an image and runs a container mounting your folder.
-- Devcontainer: Add Dockerfile Template — scaffolds a Dockerfile into `.devcontainer/Dockerfile`.
-- Devcontainer: Open Folder in Devcontainer (SSH) — builds an SSH-enabled image from the template, runs the container, configures keys, and opens the folder via Remote SSH.
-- Remote Indicator menu entries — in the bottom-left Remote menu:
-  - Open Devcontainer Configuration
-  - Open Folder in Devcontainer (SSH)
+- Open Folder in Devcontainer (SSH): Builds an SSH-enabled image, runs or reuses the container, configures keys, and opens the folder via Remote SSH.
+- Rebuild & Open: Prompts to stop/recreate safely when the container is running.
+- Per-project image/container names: Clear tags and container reuse per project.
+- Auto rebuild detection: Warns if `devcontainer.json` changed since the container was created.
+- Add Dockerfile Template: Scaffolds `.devcontainer/Dockerfile` using the built-in template.
+- Remote Indicator menu entries (bottom-left): Open Devcontainer Configuration, Open Folder in Devcontainer, Rebuild & Open.
 
 ## Installation
 - From Open VSX Marketplace (recommended for VSCodium/Positron/Theia):
@@ -23,10 +23,7 @@ Build and run a devcontainer using a Docker image, then open your folder over SS
     - VS Code: `code --install-extension ./codium-devcontainer-X.Y.Z.vsix`
     - VSCodium/Positron: `codium|positron --install-extension ./codium-devcontainer-X.Y.Z.vsix`
     - UI: Extensions view → “…” menu → Install from VSIX…
-- From source (optional):
-  - `npm ci && npm run compile`
-  - `npm i -D @vscode/vsce && npx vsce package`
-  - Install the generated `.vsix` as above
+
 
 ## Prerequisites
 - Docker installed and daemon running.
@@ -44,44 +41,35 @@ Build and run a devcontainer using a Docker image, then open your folder over SS
   // remoteUser is optional; defaults to the container's user (detected via whoami)
 }
 ```
-2. Compile the extension:
-```bash
-npm run compile
-```
-3. Use the Command Palette or status bar:
-  - "Devcontainer: Open Folder in Devcontainer (SSH)"
-   - Or: "Devcontainer: Build & Run" to use `docker exec` rather than SSH.
+2. Use the Command Palette or status bar:
+  - Devcontainer: Open Folder in Devcontainer (SSH)
+  - Devcontainer: Rebuild & Open
   - Click the status bar “Devcontainer” item for quick actions.
 
 ## How it Works
-- The SSH-enabled template at [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile) is always used to build.
-- The `image` in [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) becomes the `BASE_IMAGE` for the template.
-- The container exposes SSH on `127.0.0.1:<port>`, mounts your folder to `/workspace/<folderName>`, sets the working directory to that path, and starts `sshd`.
-- Your public key is added to `/home/<user>/.ssh/authorized_keys` inside the container, where `<user>` is either `remoteUser` (if set) or the detected container user (`whoami`).
-- If `remoteUser` is provided, it is passed as `USERNAME` build arg to the image; otherwise the base image's default user is used and detected at runtime.
-- If `postCreateCommand` is set in the devcontainer config, it runs as part of the Docker build (idempotent).
-- A random available port is chosen for SSH.
-- An SSH host alias `codium-devcontainer-<projectName>` is appended to `~/.ssh/config`.
-- The extension opens `/workspace/<folderName>` via Remote SSH.
-- If `postStartCommand` is set in the devcontainer config, it runs in the remote terminal after connection.
-- The container auto-stops when the SSH session closes or after being idle for ~60 seconds by default. You can change the idle timeout via the `IDLE_GRACE_SECONDS` environment variable.
+- Uses your `devcontainer.json` and its `image` as the base to build an SSH-enabled container.
+- Mounts your folder at `/workspace/<folder>` and opens it inside the container over Remote SSH.
+- Chooses a random available localhost port for SSH and adds your public key to the container for seamless login.
+- Picks the effective SSH user automatically (or honor `remoteUser`) and focuses the terminal when `postStartCommand` runs.
+- Reuses the per‑project container whenever possible; warns and lets you rebuild if the configuration changed.
+- Stops the container one minute after the session ends.
 
 ## Limitations
-- Only work on docker images based on Debian/Ubuntu (uses `apt` to install `openssh-server`).
-- Only single-container configurations are supported (no docker compose)
-- No tools or templates are supplied for creating or authoring devcontainer.json files
-- Only one container is supported per project (Re-open in Devcontainer will rebuild/run the same container)
-- Docker volumes are not supported, just regular mounts
+- Debian/Ubuntu images recommended (template installs `openssh-server` via `apt`).
+- Single-container only (no Docker Compose).
+- No authoring tools for `devcontainer.json`.
+- One container per project name; the extension reuses it when possible.
+- Docker volumes are not managed (bind mounts only).
 
 ## Testing Locally
 See contributing guide for local testing instructions.
 
 ## Commands
-- Devcontainer: Add Dockerfile Template — creates `.devcontainer/Dockerfile` from [assets/devcontainer/Dockerfile](assets/devcontainer/Dockerfile).
-- Devcontainer: Build & Run — builds (if needed) and runs the container, then opens a Docker exec terminal.
-- Devcontainer: Open Folder in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs with SSH on port 2222, configures your key, and opens the folder over SSH.
+- Devcontainer: Add Dockerfile Template — creates `.devcontainer/Dockerfile` from the template.
+- Devcontainer: Open Folder in Devcontainer (SSH) — builds with `BASE_IMAGE`, runs/reuses with SSH on a random local port, configures your key, and opens the folder over SSH.
+- Devcontainer: Rebuild & Open — forces rebuild and safe recreate when needed.
 - Devcontainer: Open Devcontainer Configuration — opens `.devcontainer/devcontainer.json`.
-  - Note: Explorer context menu entries appear only when `.devcontainer/devcontainer.json` exists in the current folder.
+  - Note: Explorer context menu entries appear only when `.devcontainer/devcontainer.json` exists.
 
 ## Troubleshooting
 - SSH connection issues:
