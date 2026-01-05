@@ -156,15 +156,16 @@ async function dockerBuildImage(
   wsFsPath: string,
   imageName: string,
   baseImage: string,
-  remoteUser?: string
+  remoteUser?: string,
+  dockerfilePath?: string
 ) {
-  const templateDockerfile = getTemplateDockerfilePath(ctx);
+  const dockerfileToUse = dockerfilePath || getTemplateDockerfilePath(ctx);
   const args = [
     "build",
     "-t",
     imageName,
     "-f",
-    templateDockerfile,
+    dockerfileToUse,
     "--build-arg",
     `BASE_IMAGE=${baseImage}`
   ];
@@ -584,14 +585,13 @@ export function activate(context: vscode.ExtensionContext) {
         getOutput().show(true);
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
-        await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
         const imageName = getImageName(ws.uri.fsPath);
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
         const port = await findFreePort();
         const containerName = getContainerName(ws.uri.fsPath);
 
-        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
+        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser, devcontainer);
         await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
         const detectedUser = await getEffectiveUser(containerName);
@@ -660,11 +660,7 @@ export function activate(context: vscode.ExtensionContext) {
             "No devcontainer.json found. The build command expects one in .devcontainer."
           );
         }
-        // Attempt auto-append if devcontainer.json exists
-        try {
-          const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
-          await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
-        } catch {}
+        // No longer auto-appending postCreateCommand; builds use a temporary Dockerfile.
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
         getOutput().appendLine(`Error: ${err.message}`);
@@ -747,7 +743,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         hostPort = hostPort ?? (await findFreePort());
-        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
+        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser, devcontainer);
         await dockerRestartContainer(imageName, ws.uri.fsPath, hostPort, containerName);
 
         await openWorkspaceOverSsh(ws.uri.fsPath, containerName, remoteUser, hostPort);
@@ -836,57 +832,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   // If running in a remote window (SSH), execute postStartCommand in a new terminal once.
   runPostStartCommandOnce(context);
-  async function appendPostCreateToDockerfile(wsPath: string, devcontainer: DevcontainerConfig) {
-    const devcontainerDir = path.join(wsPath, ".devcontainer");
-    const dockerfileRel = devcontainer.dockerFile || "Dockerfile";
-    const dockerfilePath = path.isAbsolute(dockerfileRel)
-      ? dockerfileRel
-      : path.join(devcontainerDir, dockerfileRel);
-
-    if (!fs.existsSync(dockerfilePath)) {
-      return;
-    }
-
-    const post = devcontainer.postCreateCommand;
-    if (!post || (Array.isArray(post) && post.length === 0)) {
-      return;
-    }
-
-    const dockerfileText = fs.readFileSync(dockerfilePath, "utf-8");
-    const marker = "# Added by codiumDevcontainer: postCreateCommand";
-    if (dockerfileText.includes(marker)) {
-      return;
-    }
-
-    const cmds: string[] = Array.isArray(post) ? post : [post];
-    const lines: string[] = [marker, ...cmds.map((c) => `RUN ${c}`)];
-    const newContent =
-      (dockerfileText.endsWith("\n") ? dockerfileText : dockerfileText + "\n") +
-      lines.join("\n") +
-      "\n";
-
-    fs.writeFileSync(dockerfilePath, newContent);
-    getOutput().appendLine("Appended postCreateCommand to Dockerfile.");
-  }
-
-  async function ensureWorkspaceEntrypoint(ctx: vscode.ExtensionContext, wsPath: string) {
-    try {
-      const devcontainerDir = path.join(wsPath, ".devcontainer");
-      const destEntrypoint = path.join(devcontainerDir, "entrypoint.sh");
-      fs.mkdirSync(devcontainerDir, { recursive: true });
-      const marker = "# Added by codiumDevcontainer: entrypoint";
-      const needsWrite = !fs.existsSync(destEntrypoint) ||
-        !fs.readFileSync(destEntrypoint, "utf-8").includes(marker);
-      if (needsWrite) {
-        const templateEntrypoint = getTemplateEntrypointPath(ctx);
-        const content = fs.readFileSync(templateEntrypoint);
-        fs.writeFileSync(destEntrypoint, content, { mode: 0o755 });
-        getOutput().appendLine("Workspace entrypoint.sh created in .devcontainer.");
-      }
-    } catch (e: any) {
-      getOutput().appendLine(`Failed to ensure entrypoint.sh: ${e?.message ?? e}`);
-    }
-  }
+  // Temporary Dockerfile approach is used for postCreate; workspace files are not modified.
 
   async function stageEntrypointTemporarily(ctx: vscode.ExtensionContext, wsPath: string) {
     try {
@@ -928,14 +874,41 @@ export function activate(context: vscode.ExtensionContext) {
     wsFsPath: string,
     imageName: string,
     baseImage: string,
-    remoteUser?: string
+    remoteUser?: string,
+    devcontainer?: DevcontainerConfig
   ) {
     await stageEntrypointTemporarily(ctx, wsFsPath);
+    const tempDockerfile = await createTemporaryDockerfile(ctx, wsFsPath, devcontainer, baseImage);
     try {
-      await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser);
+      await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser, tempDockerfile);
     } finally {
+      // Cleanup staged entrypoint and temporary Dockerfile
       await cleanupEntrypointIfManaged(wsFsPath);
+      if (tempDockerfile && fs.existsSync(tempDockerfile)) {
+        try { fs.rmSync(tempDockerfile, { force: true }); } catch {}
+      }
     }
+  }
+
+  async function createTemporaryDockerfile(
+    ctx: vscode.ExtensionContext,
+    wsFsPath: string,
+    devcontainer: DevcontainerConfig | undefined,
+    baseImage: string
+  ): Promise<string> {
+    const templatePath = getTemplateDockerfilePath(ctx);
+    const templateText = fs.readFileSync(templatePath, "utf-8");
+    const post = devcontainer?.postCreateCommand;
+    const marker = "# Added by codiumDevcontainer (temp): postCreateCommand";
+    const cmds: string[] = !post ? [] : (Array.isArray(post) ? post : [post]);
+    const lines: string[] = cmds.length ? [marker, ...cmds.map((c) => `RUN ${c}`)] : [];
+    const newContent = templateText + (templateText.endsWith("\n") ? "" : "\n") + (lines.length ? lines.join("\n") + "\n" : "");
+    const devcontainerDir = path.join(wsFsPath, ".devcontainer");
+    fs.mkdirSync(devcontainerDir, { recursive: true });
+    const tempPath = path.join(devcontainerDir, "Dockerfile.codium-temp");
+    fs.writeFileSync(tempPath, newContent, "utf-8");
+    getOutput().appendLine("Prepared temporary Dockerfile with postCreateCommand.");
+    return tempPath;
   }
 
   async function ensureContainerReadyAndGetPort(
@@ -999,13 +972,16 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (userWantsRebuild || !port || forceRebuild) {
           port = port || (await findFreePort());
-          await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser);
+          // Read devcontainer config to include postCreateCommand in temp Dockerfile if present
+          const devcontainer = readDevcontainerConfig(wsFsPath);
+          await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser, devcontainer);
           await dockerRestartContainer(imageName, wsFsPath, port, containerName);
         }
       }
     } else {
       port = await findFreePort();
-      await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser);
+      const devcontainer = readDevcontainerConfig(wsFsPath);
+      await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser, devcontainer);
       await dockerRestartContainer(imageName, wsFsPath, port, containerName);
     }
 
