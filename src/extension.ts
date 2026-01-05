@@ -72,8 +72,11 @@ async function findFreePort(): Promise<number> {
 }
 
 function makeWorkspaceSlug(wsFsPath: string): string {
-  const projectName = path.basename(wsFsPath);
-  return projectName.replace(/[^a-zA-Z0-9_-]+/g, "-");
+  const name = path.basename(wsFsPath).toLowerCase();
+  // Minimal sanitization for Docker tag compliance
+  let slug = name.replace(/[^a-z0-9._-]+/g, "-");
+  slug = slug.replace(/^[._-]+|[._-]+$/g, "");
+  return slug || "workspace";
 }
 
 function getImageName(wsFsPath: string): string {
