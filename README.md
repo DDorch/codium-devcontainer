@@ -46,20 +46,37 @@ Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and si
   - Devcontainer: Rebuild & Open
   - Click the status bar “Devcontainer” item for quick actions.
 
+## Supported devcontainer.json
+- image: Base image used as `BASE_IMAGE` for the build.
+- remoteUser: Effective/SSH user inside the container. Optional; auto-detected if omitted.
+- postCreateCommand: String or array. Injected as Dockerfile `RUN` steps during image build.
+- postStartCommand: String or array. Executed once per remote session in a terminal.
+
 ## How it Works
-- Uses your `devcontainer.json` and its `image` as the base to build an SSH-enabled container.
-- Mounts your folder at `/workspace/<folder>` and opens it inside the container over Remote SSH.
-- Chooses a random available localhost port for SSH and adds your public key to the container for seamless login.
-- Picks the effective SSH user automatically (or honor `remoteUser`) and focuses the terminal when `postStartCommand` runs.
-- Reuses the per‑project container whenever possible; warns and lets you rebuild if the configuration changed.
-- Stops the container one minute after the session ends.
+- Build Phase:
+  - Generates a temporary Dockerfile from the template, sets `BASE_IMAGE` to your `image`, and appends `postCreateCommand` as `RUN` steps.
+  - Stages a small entrypoint that starts `sshd`, builds the image, then removes the staged and temporary files.
+- Run Phase:
+  - Starts the container, bind-mounts your folder to `/workspace/<folder>`, sets the working directory, and exposes SSH on a random localhost port.
+  - Adds your SSH public key and chooses the effective user (`remoteUser` if provided, otherwise auto-detected).
+- Open Workspace:
+  - Creates an SSH host alias and opens the folder inside the container over Remote SSH.
+- Lifecycle:
+  - Reuses the per‑project container when possible; if `.devcontainer/devcontainer.json` changed since creation, prompts you to rebuild.
+  - Runs `postStartCommand` once per remote session in a terminal.
+  - Stops the container shortly after the session ends.
 
 ## Limitations
 - Debian/Ubuntu images recommended (template installs `openssh-server` via `apt`).
-- Single-container only (no Docker Compose).
+- Single container only; `dockerComposeFile` and multi-service setups are not supported.
+- Build settings in `devcontainer.json` are ignored: `dockerFile`, `build`, `context`, `args`, `target`, `features` are not read. The extension always builds from its template using `image` as the base.
+- Runtime settings like `mounts`, `runArgs`, `containerEnv`, `init`, `privileged`, `capAdd`, `securityOpt`, `forwardPorts`/`portsAttributes` are not applied.
+- Lifecycle commands other than the two listed are not supported: `onCreateCommand`, `updateContentCommand`, `postAttachCommand` are ignored.
 - No authoring tools for `devcontainer.json`.
 - One container per project name; the extension reuses it when possible.
 - Docker volumes are not managed (bind mounts only).
+
+Please open issues for feature requests for leveraging more `devcontainer.json` settings.
 
 ## Testing Locally
 See contributing guide for local testing instructions.
