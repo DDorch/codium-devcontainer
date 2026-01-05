@@ -89,6 +89,11 @@ function getContainerName(wsFsPath: string): string {
   return `codium-devcontainer-${slug}`;
 }
 
+function getHostAlias(wsFsPath: string): string {
+  const slug = makeWorkspaceSlug(wsFsPath);
+  return `codium-devcontainer-${slug}`;
+}
+
 function runCommand(
   command: string,
   args: string[],
@@ -429,6 +434,36 @@ async function setupSshAccess(containerName: string, user: string, port: number)
   return ok;
 }
 
+
+async function openWorkspaceOverSsh(
+  wsFsPath: string,
+  containerName: string,
+  remoteUser: string | undefined,
+  port: number
+): Promise<void> {
+  const effectiveUser = await getEffectiveUser(containerName, remoteUser);
+  const ok = await setupSshAccess(containerName, effectiveUser, port);
+  const projectName = path.basename(wsFsPath);
+  const hostAlias = getHostAlias(wsFsPath);
+  ensureSshConfigHostAlias(hostAlias, port, effectiveUser);
+  await ensureSshRemoteExtensionAvailable();
+  if (!ok) {
+    openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port, async () => {
+      try {
+        await runCommand("docker", ["rm", "-f", containerName]);
+        getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
+      } catch (e: any) {
+        getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
+      }
+    });
+    return;
+  }
+  const remoteUri = vscode.Uri.parse(
+    `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
+  );
+  await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
+}
+
 function openSshTerminal(
   title: string,
   user: string,
@@ -550,17 +585,13 @@ export function activate(context: vscode.ExtensionContext) {
         // Ensure devcontainer.json exists and read it
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         await appendPostCreateToDockerfile(ws.uri.fsPath, devcontainer);
-        await stageEntrypointTemporarily(context, ws.uri.fsPath);
         const imageName = getImageName(ws.uri.fsPath);
         const baseImage: string = devcontainer.image || "node:22-bookworm";
+        const remoteUser: string | undefined = devcontainer.remoteUser;
         const port = await findFreePort();
         const containerName = getContainerName(ws.uri.fsPath);
 
-        try {
-          await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage);
-        } finally {
-          await cleanupEntrypointIfManaged(ws.uri.fsPath);
-        }
+        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
         await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
 
         const detectedUser = await getEffectiveUser(containerName);
@@ -653,118 +684,14 @@ export function activate(context: vscode.ExtensionContext) {
         const devcontainer = readDevcontainerConfig(ws.uri.fsPath);
         const baseImage: string = devcontainer.image || "node:22-bookworm";
         const remoteUser: string | undefined = devcontainer.remoteUser;
-        const containerName = getContainerName(ws.uri.fsPath);
-        const imageName = getImageName(ws.uri.fsPath);
-        const exists = await containerExists(containerName);
-        let port: number | undefined;
-        if (exists) {
-          const rebuildNeeded = await shouldRebuildForDevcontainer(ws.uri.fsPath, containerName);
-          let userWantsRebuild = rebuildNeeded;
-          if (rebuildNeeded) {
-            const choice = await vscode.window.showWarningMessage(
-
-              "Devcontainer configuration changed since container creation. How would you like to proceed?",
-              { modal: true },
-              "Rebuild",
-              "Reuse"
-            );
-            if (!choice) {
-              return;
-            }
-            userWantsRebuild = choice === "Rebuild";
-            getOutput().appendLine(`Decision: ${userWantsRebuild ? "Rebuild" : "Reuse"} existing container.`);
-          }
-          await ensureContainerStarted(containerName);
-          port = await getMappedSshPort(containerName);
-          if (userWantsRebuild || !port) {
-            const running = await isContainerRunning(containerName);
-            if (running) {
-              const choice2 = await vscode.window.showWarningMessage(
-                "Container is currently running. How would you like to proceed?",
-                { modal: true },
-                "Kill & Rebuild",
-                "Reuse"
-              );
-              if (!choice2) {
-                return;
-              }
-              if (choice2 === "Reuse") {
-                userWantsRebuild = false;
-                getOutput().appendLine("Decision: Reuse running container.");
-              }
-            }
-            if (userWantsRebuild || !port) {
-              const projectName = path.basename(ws.uri.fsPath);
-              port = port || (await findFreePort());
-              await stageEntrypointTemporarily(context, ws.uri.fsPath);
-              try {
-                await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-              } finally {
-                await cleanupEntrypointIfManaged(ws.uri.fsPath);
-              }
-              const removed = await stopAndRemoveContainer(containerName);
-              if (!removed) {
-                getOutput().appendLine("Abort: Could not remove container; leaving as-is.");
-                return;
-              }
-              await runCommand("docker", [
-                "run",
-                "-d",
-                "--name",
-                containerName,
-                "-e",
-                `CODIUM_WS=/workspace/${projectName}`,
-                "-p",
-                `127.0.0.1:${port}:22`,
-                "-v",
-                `${ws.uri.fsPath}:/workspace/${projectName}`,
-                "-w",
-                `/workspace/${projectName}`,
-                imageName
-              ]);
-              getOutput().appendLine(`Recreated container '${containerName}' on localhost:${port}.`);
-            }
-          }
-        } else {
-          port = await findFreePort();
-          await stageEntrypointTemporarily(context, ws.uri.fsPath);
-          try {
-            await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-          } finally {
-            await cleanupEntrypointIfManaged(ws.uri.fsPath);
-          }
-          await dockerRestartContainer(imageName, ws.uri.fsPath, port, containerName);
-        }
-
-        const effectiveUser = await getEffectiveUser(containerName, remoteUser);
-        const ok = await setupSshAccess(containerName, effectiveUser, port!);
-
-        // Ensure SSH config has a host alias
-        const projectName = path.basename(ws.uri.fsPath);
-        const hostAlias = `codium-devcontainer-${projectName.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-        ensureSshConfigHostAlias(hostAlias, port!, effectiveUser);
-
-        // Ensure an SSH remote extension is available (Microsoft or Positron's Open Remote - SSH)
-        await ensureSshRemoteExtensionAvailable();
-
-        // Verify SSH auth before opening Remote-SSH
-        if (!ok) {
-          openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port!, async () => {
-            try {
-              await runCommand("docker", ["rm", "-f", containerName]);
-              getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
-            } catch (e: any) {
-              getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
-            }
-          });
-          return;
-        }
-
-        // Open the folder over Remote-SSH
-        const remoteUri = vscode.Uri.parse(
-          `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
+        const { port, containerName } = await ensureContainerReadyAndGetPort(
+          context,
+          ws.uri.fsPath,
+          baseImage,
+          remoteUser,
+          false
         );
-        await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
+        await openWorkspaceOverSsh(ws.uri.fsPath, containerName, remoteUser, port);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
         getOutput().appendLine(`Error: ${err.message}`);
@@ -812,26 +739,7 @@ export function activate(context: vscode.ExtensionContext) {
                 );
               } else {
                 const effectiveUser = await getEffectiveUser(containerName, remoteUser);
-                const ok = await setupSshAccess(containerName, effectiveUser, hostPort);
-                const projectName = path.basename(ws.uri.fsPath);
-                const hostAlias = `codium-devcontainer-${projectName.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-                ensureSshConfigHostAlias(hostAlias, hostPort, effectiveUser);
-                await ensureSshRemoteExtensionAvailable();
-                if (!ok) {
-                  openSshTerminal("Devcontainer SSH (manual)", effectiveUser, hostPort, async () => {
-                    try {
-                      await runCommand("docker", ["rm", "-f", containerName]);
-                      getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
-                    } catch (e: any) {
-                      getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
-                    }
-                  });
-                  return;
-                }
-                const remoteUri = vscode.Uri.parse(
-                  `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
-                );
-                await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
+                await openWorkspaceOverSsh(ws.uri.fsPath, containerName, remoteUser, hostPort);
                 return;
               }
             }
@@ -839,35 +747,10 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         hostPort = hostPort ?? (await findFreePort());
-        await stageEntrypointTemporarily(context, ws.uri.fsPath);
-        try {
-          await dockerBuildImage(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
-        } finally {
-          await cleanupEntrypointIfManaged(ws.uri.fsPath);
-        }
+        await buildImageWithEntrypoint(context, ws.uri.fsPath, imageName, baseImage, remoteUser);
         await dockerRestartContainer(imageName, ws.uri.fsPath, hostPort, containerName);
 
-        const effectiveUser = await getEffectiveUser(containerName, remoteUser);
-        const ok = await setupSshAccess(containerName, effectiveUser, hostPort);
-        const projectName = path.basename(ws.uri.fsPath);
-        const hostAlias = `codium-devcontainer-${projectName.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
-        ensureSshConfigHostAlias(hostAlias, hostPort, effectiveUser);
-        await ensureSshRemoteExtensionAvailable();
-        if (!ok) {
-          openSshTerminal("Devcontainer SSH (manual)", effectiveUser, hostPort, async () => {
-            try {
-              await runCommand("docker", ["rm", "-f", containerName]);
-              getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
-            } catch (e: any) {
-              getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);
-            }
-          });
-          return;
-        }
-        const remoteUri = vscode.Uri.parse(
-          `vscode-remote://ssh-remote+${hostAlias}/workspace/${projectName}`
-        );
-        await vscode.commands.executeCommand("vscode.openFolder", remoteUri, true);
+        await openWorkspaceOverSsh(ws.uri.fsPath, containerName, remoteUser, hostPort);
       } catch (err: any) {
         vscode.window.showErrorMessage(err.message);
         getOutput().appendLine(`Error: ${err.message}`);
@@ -892,8 +775,6 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.window.showTextDocument(doc, { preview: false });
     }
   );
-
-
 
   const showMenu = vscode.commands.registerCommand(
     "codiumDevcontainer.showMenu",
@@ -1040,6 +921,95 @@ export function activate(context: vscode.ExtensionContext) {
     } catch (e: any) {
       getOutput().appendLine(`Failed to cleanup entrypoint.sh: ${e?.message ?? e}`);
     }
+  }
+
+  async function buildImageWithEntrypoint(
+    ctx: vscode.ExtensionContext,
+    wsFsPath: string,
+    imageName: string,
+    baseImage: string,
+    remoteUser?: string
+  ) {
+    await stageEntrypointTemporarily(ctx, wsFsPath);
+    try {
+      await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser);
+    } finally {
+      await cleanupEntrypointIfManaged(wsFsPath);
+    }
+  }
+
+  async function ensureContainerReadyAndGetPort(
+    ctx: vscode.ExtensionContext,
+    wsFsPath: string,
+    baseImage: string,
+    remoteUser: string | undefined,
+    forceRebuild: boolean
+  ): Promise<{ port: number; containerName: string; imageName: string }> {
+    const containerName = getContainerName(wsFsPath);
+    const imageName = getImageName(wsFsPath);
+    const exists = await containerExists(containerName);
+    let port: number | undefined;
+
+    if (exists) {
+      let userWantsRebuild = forceRebuild;
+      if (!forceRebuild) {
+        const rebuildNeeded = await shouldRebuildForDevcontainer(wsFsPath, containerName);
+        userWantsRebuild = rebuildNeeded;
+        if (rebuildNeeded) {
+          const choice = await vscode.window.showWarningMessage(
+            "Devcontainer configuration changed since container creation. How would you like to proceed?",
+            { modal: true },
+            "Rebuild",
+            "Reuse"
+          );
+          if (!choice) {
+            throw new Error("Operation cancelled");
+          }
+          userWantsRebuild = choice === "Rebuild";
+          getOutput().appendLine(`Decision: ${userWantsRebuild ? "Rebuild" : "Reuse"} existing container.`);
+        }
+      }
+
+      await ensureContainerStarted(containerName);
+      port = await getMappedSshPort(containerName);
+      if (!port && !userWantsRebuild) {
+        vscode.window.showWarningMessage(
+          "Could not detect mapped SSH port for the running container. Rebuilding to allocate a new port."
+        );
+        userWantsRebuild = true;
+      }
+
+      if (userWantsRebuild || !port || forceRebuild) {
+        const running = await isContainerRunning(containerName);
+        if (running) {
+          const choice2 = await vscode.window.showWarningMessage(
+            "Container is currently running. How would you like to proceed?",
+            { modal: true },
+            "Kill & Rebuild",
+            "Reuse"
+          );
+          if (!choice2) {
+            throw new Error("Operation cancelled");
+          }
+          if (choice2 === "Reuse") {
+            userWantsRebuild = false;
+            getOutput().appendLine("Decision: Reuse running container.");
+          }
+        }
+
+        if (userWantsRebuild || !port || forceRebuild) {
+          port = port || (await findFreePort());
+          await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser);
+          await dockerRestartContainer(imageName, wsFsPath, port, containerName);
+        }
+      }
+    } else {
+      port = await findFreePort();
+      await buildImageWithEntrypoint(ctx, wsFsPath, imageName, baseImage, remoteUser);
+      await dockerRestartContainer(imageName, wsFsPath, port, containerName);
+    }
+
+    return { port: port!, containerName, imageName };
   }
 
   // Already added above
