@@ -1,5 +1,11 @@
 # codium-devcontainer News
 
+## 0.3.1 — 2026-01-05
+
+Fixes
+- [#18](https://github.com/DDorch/codium-devcontainer/issues/18): Ensure Docker image/tag names are lowercase to satisfy Docker naming rules.
+- [#19](https://github.com/DDorch/codium-devcontainer/issues/19): Honor `postCreateCommand` by building with a temporary Dockerfile that injects commands as `RUN` steps.
+
 ## 0.3.0 — 2026-01-02
 
 Enhancements
