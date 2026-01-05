@@ -94,7 +94,7 @@
           "when": "codiumDevcontainer.hasConfig"
         }
       ],
-"statusBar/remoteIndicator": [
+      "statusBar/remoteIndicator": [
         {
           "command": "codiumDevcontainer.openDevcontainerConfig",
           "group": "remote_30_devcontainer_3local@1",
