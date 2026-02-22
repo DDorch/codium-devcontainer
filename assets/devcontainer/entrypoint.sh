@@ -20,16 +20,8 @@ trap cleanup TERM INT
 
 # Detect active SSH connections to port 22
 has_active_ssh() {
-  if command -v ss >/dev/null 2>&1; then
-    ss -tan 2>/dev/null | awk '$4 ~ /:22$/ && $1 ~ /ESTAB/ {found=1} END {exit !found}'
-    return $?
-  elif command -v netstat >/dev/null 2>&1; then
-    netstat -tan 2>/dev/null | awk '$4 ~ /:22$/ && $6 ~ /ESTABLISHED/ {found=1} END {exit !found}'
-    return $?
-  else
-    # No socket tools; assume active
-    return 0
-  fi
+  ss -tan 2>/dev/null | awk '$4 ~ /:22$/ && $1 ~ /ESTAB/ {found=1} END {exit !found}'
+  return $?
 }
 
 CHECK_INTERVAL=${CHECK_INTERVAL:-2}

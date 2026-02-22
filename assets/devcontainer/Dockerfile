@@ -8,6 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        git \
        curl \
+     iproute2 \
        sudo \
        bash \
        ca-certificates \
