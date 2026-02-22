@@ -21,16 +21,6 @@ import {
 } from "./sshRuntime";
 
 export function activate(context: vscode.ExtensionContext) {
-  // Reset postStart once-per-folder guard at the start of each remote window
-  async function resetPostStartGuard() {
-    try {
-      if (!vscode.env.remoteName) return;
-      const ws = getWorkspaceFolder();
-      if (!ws) return;
-      const key = `codiumDevcontainer.postStart.run:${ws.uri.fsPath}`;
-      await context.workspaceState.update(key, undefined);
-    } catch {}
-  }
   async function updateDevcontainerContext() {
     const ws = getWorkspaceFolder();
     const has = ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false;
@@ -38,8 +28,6 @@ export function activate(context: vscode.ExtensionContext) {
   }
   // Initialize context and watch for changes to devcontainer.json
   updateDevcontainerContext();
-  // Ensure postStart can run once per remote session
-  resetPostStartGuard();
   const ws = getWorkspaceFolder();
   if (ws) {
     const watcher = vscode.workspace.createFileSystemWatcher(
@@ -47,12 +35,12 @@ export function activate(context: vscode.ExtensionContext) {
     );
     watcher.onDidCreate(async () => {
       await updateDevcontainerContext();
-      await runPostStartCommandOnce(context);
+      await runPostStartCommand();
     });
     watcher.onDidDelete(updateDevcontainerContext);
     watcher.onDidChange(async () => {
       await updateDevcontainerContext();
-      await runPostStartCommandOnce(context);
+      await runPostStartCommand();
     });
     context.subscriptions.push(watcher);
   }
@@ -249,11 +237,11 @@ export function activate(context: vscode.ExtensionContext) {
     rebuildAndOpen,
     showMenu
   );
-  // If running in a remote window (SSH), execute postStartCommand in a new terminal once.
-  runPostStartCommandOnce(context);
+  // If running in a remote window (SSH), execute postStartCommand in a new terminal.
+  runPostStartCommand();
 }
 
-async function runPostStartCommandOnce(context: vscode.ExtensionContext) {
+async function runPostStartCommand() {
   try {
     if (!vscode.env.remoteName) return;
     const ws = getWorkspaceFolder();
@@ -262,9 +250,6 @@ async function runPostStartCommandOnce(context: vscode.ExtensionContext) {
     if (!dev) return;
     const postStart = dev.postStartCommand;
     if (!postStart || (Array.isArray(postStart) && postStart.length === 0)) return;
-    const key = `codiumDevcontainer.postStart.run:${ws.uri.fsPath}`;
-    const already = context.workspaceState.get<boolean>(key);
-    if (already) return;
     const out = getOutput();
     out.appendLine("Running postStartCommand in remote terminal...");
     out.show(true);
@@ -281,7 +266,6 @@ async function runPostStartCommandOnce(context: vscode.ExtensionContext) {
         }
       }
     );
-    await context.workspaceState.update(key, true);
   } catch {
     // ignore
   }

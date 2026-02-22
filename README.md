@@ -5,10 +5,6 @@ Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and si
 ## Features
 - Open Folder in Devcontainer (SSH): Builds an SSH-enabled image, runs or reuses the container, configures keys, and opens the folder via Remote SSH.
 - Rebuild & Open: Prompts to stop/recreate safely when the container is running.
-- Per-project image/container names: Clear tags and container reuse per project.
-- Auto rebuild detection: Warns if `devcontainer.json` changed since the container was created.
-- Add Dockerfile Template: Scaffolds `.devcontainer/Dockerfile` using the built-in template.
-- Remote Indicator menu entries (bottom-left): Open Devcontainer Configuration, Open Folder in Devcontainer, Rebuild & Open.
 
 ## Installation
 - From Open VSX Marketplace (recommended for VSCodium/Positron/Theia):
@@ -27,18 +23,14 @@ Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and si
 
 ## Prerequisites
 - Docker installed and daemon running.
-- A folder with `.devcontainer/devcontainer.json`.
-  - Uses `image` as the base image for the template.
-  - Optional: `remoteUser` for the SSH user. If omitted, the extension detects the container's current user via `docker exec whoami` and uses that for SSH and key setup.
 - A local SSH public key available (e.g., `~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`).
-- Optional: Remote - SSH extension (needed only for "Open Folder in Devcontainer (SSH)" to open the folder in a Remote window). If unavailable on your marketplace (e.g., Open VSX/VSCodium), you can still use "Build & Run" or connect via an SSH terminal.
+- [Open Remote - SSH extension](https://open-vsx.org/extension/jeanp413/open-remote-ssh) installed
 
 ## Quickstart
 1. Create a devcontainer config:
 ```json
 {
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22"
-  // remoteUser is optional; defaults to the container's user (detected via whoami)
 }
 ```
 2. Use the Command Palette or status bar:
@@ -50,7 +42,7 @@ Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and si
 - image: Base image used as `BASE_IMAGE` for the build.
 - remoteUser: Effective/SSH user inside the container. Optional; auto-detected if omitted.
 - postCreateCommand: String or array. Injected as Dockerfile `RUN` steps during image build.
-- postStartCommand: String or array. Executed once per remote session in a terminal.
+- postStartCommand: String or array. Executed in a terminal when each remote session starts.
 
 ## How it Works
 - Build Phase:
@@ -63,7 +55,7 @@ Alternative to proprietary VS Code Dev Containers for VSCodium, Positron, and si
   - Creates an SSH host alias and opens the folder inside the container over Remote SSH.
 - Lifecycle:
   - Reuses the per‑project container when possible; if `.devcontainer/devcontainer.json` changed since creation, prompts you to rebuild.
-  - Runs `postStartCommand` once per remote session in a terminal.
+  - Runs `postStartCommand` in a terminal when each remote session starts.
   - Stops the container shortly after the session ends.
 
 ## Limitations

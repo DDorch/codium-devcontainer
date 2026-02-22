@@ -1,5 +1,10 @@
 # codium-devcontainer News
 
+## Unreleased
+
+Enhancements
+- [#25](https://github.com/DDorch/codium-devcontainer/issues/25): Align `postStartCommand` behavior with devcontainer lifecycle semantics: run on each remote session start (removed once-per-session guard).
+
 ## 0.3.1 — 2026-01-05
 
 Fixes
