@@ -161,7 +161,17 @@ export function openSshTerminal(
   const sshTerminal = vscode.window.createTerminal({
     name: title,
     shellPath: "ssh",
-    shellArgs: ["-F", "/dev/null", "-p", String(port), `${user}@localhost`]
+    shellArgs: [
+      "-F",
+      "/dev/null",
+      "-o",
+      "StrictHostKeyChecking=no",
+      "-o",
+      "UserKnownHostsFile=/dev/null",
+      "-p",
+      String(port),
+      `${user}@localhost`
+    ]
   });
   sshTerminal.show();
   if (onClose) {

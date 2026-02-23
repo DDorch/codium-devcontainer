@@ -22,7 +22,7 @@ RUN apt-get update && \
 # Set up SSH
 RUN mkdir -p /var/run/sshd && \
     echo "PasswordAuthentication no" >> /etc/ssh/sshd_config && \
-    echo "PermitRootLogin no" >> /etc/ssh/sshd_config && \
+  echo "PermitRootLogin prohibit-password" >> /etc/ssh/sshd_config && \
     echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
 
 # Optionally create a non-root dev user when USERNAME is provided via build-arg
