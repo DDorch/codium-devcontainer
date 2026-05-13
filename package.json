@@ -111,6 +111,22 @@
           "when": "!remoteName && codiumDevcontainer.hasConfig"
         }
       ]
+    },
+    "configuration": {
+      "title": "Remote - devcontainer",
+      "properties": {
+        "remote.devcontainer.containerBinary": {
+          "type": "string",
+          "default": "docker",
+          "description": "Container binary to use, e.g. 'docker' or 'podman'."
+        },
+        "remote.devcontainer.containerExtraArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra arguments passed to the container binary before the subcommand, e.g. ['--root', '/custom/storage']."
+        }
+      }
     }
   },
   "main": "./dist/extension.js",

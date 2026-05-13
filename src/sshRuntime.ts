@@ -5,12 +5,13 @@ import {
   getHomeDir,
   getHostAlias,
   getOutput,
-  runCommand,
-  runCommandCapture
+  runCommandCapture,
+  runContainerCommand,
+  runContainerCommandCapture
 } from "./devcontainerCore";
 
 async function getContainerUsername(containerName: string): Promise<string> {
-  const result = await runCommandCapture("docker", ["exec", containerName, "whoami"]);
+  const result = await runContainerCommandCapture(["exec", containerName, "whoami"]);
   if (result.code === 0 && result.stdout.trim()) {
     return result.stdout.trim();
   }
@@ -21,7 +22,7 @@ async function getContainerUsername(containerName: string): Promise<string> {
 }
 
 async function detectPreferredNonRootUser(containerName: string): Promise<string | undefined> {
-  const res1 = await runCommandCapture("docker", [
+  const res1 = await runContainerCommandCapture([
     "exec",
     containerName,
     "bash",
@@ -31,7 +32,7 @@ async function detectPreferredNonRootUser(containerName: string): Promise<string
   const candidate1 = res1.stdout.trim();
   if (candidate1) return candidate1;
 
-  const res2 = await runCommandCapture("docker", [
+  const res2 = await runContainerCommandCapture([
     "exec",
     containerName,
     "bash",
@@ -44,7 +45,7 @@ async function detectPreferredNonRootUser(containerName: string): Promise<string
 }
 
 async function getUserHome(containerName: string, user: string): Promise<string> {
-  const res = await runCommandCapture("docker", [
+  const res = await runContainerCommandCapture([
     "exec",
     containerName,
     "bash",
@@ -83,17 +84,22 @@ async function resolvePublicKeyPath(): Promise<string | undefined> {
 
 async function ensureAuthorizedKeyInContainer(containerName: string, user: string, pubKeyPath: string) {
   const home = await getUserHome(containerName, user);
-  await runCommand("docker", [
+  await runContainerCommand([
     "exec",
+    "--user", "root",
     containerName,
     "bash",
     "-lc",
     `mkdir -p ${home}/.ssh && chmod 700 ${home}/.ssh && touch ${home}/.ssh/authorized_keys && chmod 600 ${home}/.ssh/authorized_keys && chown -R ${user}:${user} ${home}/.ssh`
   ]);
   const keyData = fs.readFileSync(pubKeyPath, "utf-8").trim() + "\n";
-  await runCommand(
-    "docker",
-    ["exec", "-i", containerName, "bash", "-lc", `cat >> ${home}/.ssh/authorized_keys`],
+  await runContainerCommand([
+    "exec",
+    "--user", "root",
+    "-i", containerName,
+    "bash", "-lc",
+    `cat >> ${home}/.ssh/authorized_keys`
+  ],
     { input: keyData }
   );
 }
@@ -195,6 +201,7 @@ function ensureSshConfigHostAlias(hostAlias: string, port: number, user: string)
   fs.mkdirSync(sshDir, { recursive: true });
   let configText = fs.existsSync(sshConfigPath) ? fs.readFileSync(sshConfigPath, "utf-8") : "";
   const block = [
+    "",
     `Host ${hostAlias}`,
     `  HostName 127.0.0.1`,
     `  Port ${port}`,
@@ -247,7 +254,7 @@ export async function openWorkspaceOverSsh(
   if (!ok) {
     openSshTerminal("Devcontainer SSH (manual)", effectiveUser, port, async () => {
       try {
-        await runCommand("docker", ["rm", "-f", containerName]);
+        await runContainerCommand(["rm", "-f", containerName]);
         getOutput().appendLine(`Stopped container ${containerName} after terminal closed.`);
       } catch (e: any) {
         getOutput().appendLine(`Failed to stop container ${containerName}: ${e?.message ?? e}`);

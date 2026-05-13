@@ -11,7 +11,7 @@ import {
   getWorkspaceFolder,
   rebuildContainer,
   resolveDevcontainerContext,
-  runCommand
+  runContainerCommand
 } from "./devcontainerCore";
 import {
   getEffectiveUser,
@@ -99,7 +99,7 @@ export function activate(context: vscode.ExtensionContext) {
       await setupSshAccess(resolved.containerName, detectedUser, port);
       openSshTerminal("Devcontainer SSH", detectedUser, port, async () => {
         try {
-          await runCommand("docker", ["rm", "-f", resolved.containerName]);
+          await runContainerCommand(["rm", "-f", resolved.containerName]);
           getOutput().appendLine(`Stopped container ${resolved.containerName} after terminal closed.`);
         } catch (e: any) {
           getOutput().appendLine(`Failed to stop container ${resolved.containerName}: ${e?.message ?? e}`);

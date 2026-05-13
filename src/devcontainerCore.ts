@@ -141,6 +141,30 @@ export function runCommand(
   });
 }
 
+export function getContainerBinary(): string {
+  const config = vscode.workspace.getConfiguration("codiumDevcontainer");
+  return config.get<string>("containerBinary") || "docker";
+}
+
+export function getContainerExtraArgs(): string[] {
+  const config = vscode.workspace.getConfiguration("codiumDevcontainer");
+  return config.get<string[]>("containerExtraArgs") ?? [];
+}
+
+export function runContainerCommand(
+  args: string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string }
+): Promise<void> {
+  return runCommand(getContainerBinary(), [...getContainerExtraArgs(), ...args], options);
+}
+
+export function runContainerCommandCapture(
+  args: string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv }
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  return runCommandCapture(getContainerBinary(), [...getContainerExtraArgs(), ...args], options);
+}
+
 export async function runCommandCapture(
   command: string,
   args: string[],
@@ -195,7 +219,7 @@ async function dockerBuildImage(
   args.push(wsFsPath);
   vscode.window.showInformationMessage("Building SSH-enabled devcontainer image...");
   getOutput().show(true);
-  await runCommand("docker", args);
+  await runContainerCommand(args);
 }
 
 async function dockerRestartContainer(
@@ -205,16 +229,16 @@ async function dockerRestartContainer(
   containerName: string
 ) {
   try {
-    await runCommand("docker", ["stop", containerName]);
+    await runContainerCommand(["stop", containerName]);
   } catch {}
   try {
-    await runCommand("docker", ["rm", "-f", containerName]);
+    await runContainerCommand(["rm", "-f", containerName]);
   } catch {}
 
   vscode.window.showInformationMessage(`Starting container with SSH on localhost:${hostPort}...`);
   getOutput().show(true);
   const projectName = path.basename(wsFsPath);
-  await runCommand("docker", [
+  await runContainerCommand([
     "run",
     "-d",
     "--name",
@@ -232,13 +256,13 @@ async function dockerRestartContainer(
 }
 
 async function containerExists(name: string): Promise<boolean> {
-  const res = await runCommandCapture("docker", ["inspect", name]);
+  const res = await runContainerCommandCapture(["container", "inspect", name]);
   return res.code === 0;
 }
 
 async function getMappedSshPort(name: string): Promise<number | undefined> {
-  const res = await runCommandCapture("docker", [
-    "inspect",
+  const res = await runContainerCommandCapture([
+    "container", "inspect",
     "-f",
     "{{ (index (index .NetworkSettings.Ports \"22/tcp\") 0).HostPort }}",
     name
@@ -250,14 +274,14 @@ async function getMappedSshPort(name: string): Promise<number | undefined> {
 }
 
 async function ensureContainerStarted(name: string): Promise<void> {
-  await runCommand("docker", ["start", name]).catch(async () => {
-    await runCommand("docker", ["restart", name]).catch(() => {});
+  await runContainerCommand(["start", name]).catch(async () => {
+    await runContainerCommand(["restart", name]).catch(() => {});
   });
 }
 
 async function isContainerRunning(name: string): Promise<boolean> {
-  const res = await runCommandCapture("docker", [
-    "inspect",
+  const res = await runContainerCommandCapture([
+    "container", "inspect",
     "-f",
     "{{.State.Running}}",
     name
@@ -275,8 +299,8 @@ function getDevcontainerMtimeMs(wsFsPath: string): number | undefined {
 }
 
 async function getContainerCreatedMs(name: string): Promise<number | undefined> {
-  const res = await runCommandCapture("docker", [
-    "inspect",
+  const res = await runContainerCommandCapture([
+    "container", "inspect",
     "-f",
     "{{.Created}}",
     name
